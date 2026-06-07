@@ -1,13 +1,10 @@
-# OS
-.DS_Store
-Thumbs.db
-
-# VS Code extension
+# Docspace extension
 docspace/out/
 docspace/dist/
 docspace/node_modules/
 docspace/.vscode-test/
 docspace/*.vsix
 
-# Site (futuro)
-site/node_modules/
+# OS
+.DS_Store
+Thumbs.db
