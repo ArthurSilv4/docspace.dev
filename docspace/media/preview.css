@@ -1,0 +1,182 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: var(--vscode-editor-font-size, 14px);
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Toolbar ──────────────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 1rem;
+  height: 36px;
+  flex-shrink: 0;
+  background: var(--vscode-tab-activeBackground, var(--vscode-editor-background));
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vscode-foreground);
+}
+
+.file-icon { font-size: 15px; }
+.file-name { opacity: 0.85; }
+
+/* ── Preview content ──────────────────────────────────────────────────────── */
+.preview-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem 2.5rem;
+  line-height: 1.8;
+}
+
+.preview-content > * { max-width: 720px; }
+
+.preview-content h1,
+.preview-content h2,
+.preview-content h3,
+.preview-content h4,
+.preview-content h5,
+.preview-content h6 {
+  color: var(--vscode-editor-foreground);
+  font-weight: 600;
+  margin-top: 1.8em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+}
+
+.preview-content h1,
+.preview-content h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.preview-content h1 { font-size: 1.75em; }
+.preview-content h2 { font-size: 1.4em; }
+
+.preview-content p { margin: 0.8em 0; }
+
+.preview-content a { color: var(--vscode-textLink-foreground); text-decoration: none; }
+.preview-content a:hover { text-decoration: underline; }
+
+.preview-content code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.88em;
+  background: var(--vscode-textBlockQuote-background);
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+}
+
+.preview-content pre {
+  background: var(--vscode-textBlockQuote-background);
+  border-left: 3px solid var(--vscode-textBlockQuote-border);
+  padding: 1rem 1.25rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  line-height: 1.5;
+  margin: 1em 0;
+}
+
+.preview-content pre code { background: none; padding: 0; }
+
+.preview-content blockquote {
+  border-left: 4px solid var(--vscode-textBlockQuote-border);
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-textBlockQuote-background);
+  border-radius: 0 4px 4px 0;
+}
+
+.preview-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.preview-content th,
+.preview-content td {
+  border: 1px solid var(--vscode-panel-border);
+  padding: 0.5em 1em;
+  text-align: left;
+}
+
+.preview-content th {
+  background: var(--vscode-textBlockQuote-background);
+  font-weight: 600;
+}
+
+.preview-content img { max-width: 100%; border-radius: 4px; }
+
+.preview-content hr {
+  border: none;
+  border-top: 1px solid var(--vscode-panel-border);
+  margin: 2em 0;
+}
+
+.preview-content ul,
+.preview-content ol {
+  padding-left: 1.5em;
+  margin: 0.8em 0;
+}
+
+.preview-content li { margin: 0.25em 0; }
+
+/* ── Mermaid ──────────────────────────────────────────────────────────────── */
+.mermaid-container {
+  position: relative;
+  margin: 1.5em 0;
+  overflow: hidden;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  min-height: 120px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--vscode-editor-background);
+}
+
+.mermaid-container:active { cursor: grabbing; }
+.mermaid-container svg { max-width: 100%; height: auto; display: block; }
+
+.diagram-reset {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 10;
+}
+
+.mermaid-container:hover .diagram-reset { opacity: 1; }
+
+.mermaid-error {
+  color: var(--vscode-errorForeground);
+  background: var(--vscode-inputValidation-errorBackground);
+  border: 1px solid var(--vscode-inputValidation-errorBorder);
+  padding: 0.5em 1em;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.85em;
+  margin: 0.5em 0;
+}

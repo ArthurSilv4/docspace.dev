@@ -1,0 +1,231 @@
+{
+  "name": "docspace",
+  "displayName": "Docspace",
+  "description": "Visualize and manage Markdown, Mermaid diagrams and Excalidraw canvases inside VS Code.",
+  "publisher": "docspace",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.120.0"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "docspace.openPreview",
+        "title": "Visualizar"
+      },
+      {
+        "command": "docspace.selectDiagramTheme",
+        "title": "Mudar tema dos diagramas",
+        "icon": "$(symbol-color)"
+      },
+      {
+        "command": "docspace.selectMode",
+        "title": "Mudar modo de descoberta",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "docspace.newMarkdown",
+        "title": "New Markdown File",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "docspace.newMermaid",
+        "title": "New Mermaid Diagram",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "docspace.newExcalidraw",
+        "title": "New Canvas",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "docspace.deleteFile",
+        "title": "Delete",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "docspace.renameFile",
+        "title": "Rename",
+        "icon": "$(edit)"
+      }
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "docspace.newMarkdown",
+          "when": "view == docspace.explorer && viewItem == dsCat_docs",
+          "group": "docspace@1"
+        },
+        {
+          "command": "docspace.newMarkdown",
+          "when": "view == docspace.explorer && viewItem == dsFolder",
+          "group": "docspace@1"
+        },
+        {
+          "command": "docspace.newMermaid",
+          "when": "view == docspace.explorer && viewItem == dsCat_diagrams",
+          "group": "docspace@2"
+        },
+        {
+          "command": "docspace.newMermaid",
+          "when": "view == docspace.explorer && viewItem == dsFolder",
+          "group": "docspace@2"
+        },
+        {
+          "command": "docspace.newExcalidraw",
+          "when": "view == docspace.explorer && viewItem == dsCat_canvas",
+          "group": "docspace@3"
+        },
+        {
+          "command": "docspace.newExcalidraw",
+          "when": "view == docspace.explorer && viewItem == dsFolder",
+          "group": "docspace@3"
+        },
+        {
+          "command": "docspace.newMarkdown",
+          "when": "view == docspace.explorer && viewItem == dsCat_all",
+          "group": "docspace@1"
+        },
+        {
+          "command": "docspace.newMermaid",
+          "when": "view == docspace.explorer && viewItem == dsCat_all",
+          "group": "docspace@2"
+        },
+        {
+          "command": "docspace.newExcalidraw",
+          "when": "view == docspace.explorer && viewItem == dsCat_all",
+          "group": "docspace@3"
+        },
+        {
+          "command": "docspace.deleteFile",
+          "when": "view == docspace.explorer && viewItem =~ /dsFile|dsFolder/",
+          "group": "inline"
+        },
+        {
+          "command": "docspace.renameFile",
+          "when": "view == docspace.explorer && viewItem =~ /dsFile|dsFolder/",
+          "group": "docspace@8"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "docspace.selectDiagramTheme",
+          "when": "view == docspace.explorer",
+          "group": "navigation"
+        },
+        {
+          "command": "docspace.selectMode",
+          "when": "view == docspace.explorer",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Docspace",
+      "properties": {
+        "docspace.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "folder"
+          ],
+          "enumDescriptions": [
+            "Descobre arquivos .md, .mmd e blocos Mermaid em todo o workspace.",
+            "Usa a pasta definida em docspace.rootFolder (.docspace por padrão) como fonte."
+          ],
+          "default": "auto",
+          "description": "Modo de descoberta de arquivos do Docspace."
+        },
+        "docspace.rootFolder": {
+          "type": "string",
+          "default": ".docspace",
+          "description": "Pasta raiz usada no modo 'folder'. Pode ser um caminho relativo à raiz do workspace."
+        },
+        "docspace.diagramTheme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "default",
+            "dark",
+            "forest",
+            "neutral",
+            "base"
+          ],
+          "enumDescriptions": [
+            "Detecta o tema do VS Code automaticamente (claro → default, escuro → dark).",
+            "Tema padrão do Mermaid.",
+            "Tema escuro.",
+            "Tema floresta (tons de verde).",
+            "Tema neutro (tons de cinza).",
+            "Tema base personalizável."
+          ],
+          "default": "auto",
+          "description": "Tema dos diagramas Mermaid no preview."
+        },
+        "docspace.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "node_modules",
+            ".git",
+            "out",
+            "dist"
+          ],
+          "description": "Pastas a ignorar na descoberta de arquivos."
+        }
+      }
+    },
+    "customEditors": [
+      {
+        "viewType": "docspace.canvasEditor",
+        "displayName": "Docspace Canvas",
+        "selector": [{ "filenamePattern": "*.excalidraw" }],
+        "priority": "default"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "docspace-sidebar",
+          "title": "Docspace",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "docspace-sidebar": [
+        {
+          "id": "docspace.explorer",
+          "name": "Docspace"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.120.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.39.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1"
+  }
+}
