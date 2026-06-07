@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Docspace brings Markdown previews, Mermaid diagrams, and Excalidraw canvases directly into VS Code. Free extension, no configuration required.">
+  <meta property="og:title" content="Docspace — Documentation inside VS Code">
+  <meta property="og:description" content="Markdown previews, Mermaid diagrams, and Excalidraw canvases — live, organized, and fully integrated into VS Code.">
+  <meta property="og:type" content="website">
+  <title>Docspace — Documentation inside VS Code</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0a;
+      --surface:   #111111;
+      --card:      #161616;
+      --border:    #222222;
+      --text:      #f0f0f0;
+      --text-2:    #b0b0b0;
+      --muted:     #666666;
+      --subtle:    #333333;
+      --font:      'Inter', sans-serif;
+      --mono:      'JetBrains Mono', monospace;
+      --radius:    8px;
+      --radius-lg: 12px;
+      /* VS Code mockup palette */
+      --vs-bg:     #0f0f0f;
+      --vs-bar:    #1a1a1a;
+      --vs-panel:  #161616;
+      --vs-tabs:   #1c1c1c;
+      --vs-edge:   #252525;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── REVEAL ANIMATIONS ── */
+    .reveal {
+      opacity: 0; transform: translateY(20px);
+      transition: opacity .55s ease, transform .55s ease;
+    }
+    .reveal.visible { opacity: 1; transform: none; }
+    .reveal-d1 { transition-delay: 80ms; }
+    .reveal-d2 { transition-delay: 160ms; }
+
+    @keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2.5rem; height: 56px;
+      background: rgba(10, 10, 10, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.3s;
+    }
+    nav.scrolled { border-color: var(--border); }
+
+    .nav-logo { font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
+    .nav-logo span { color: var(--muted); font-weight: 400; }
+
+    .nav-right { display: flex; align-items: center; gap: 2rem; }
+    .nav-right a { color: var(--muted); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: color 0.15s; }
+    .nav-right a:hover { color: var(--text); }
+
+    .btn-install {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.45rem 1rem;
+      background: var(--text); color: var(--bg);
+      border-radius: var(--radius);
+      font-size: 0.85rem; font-weight: 600; text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .btn-install:hover { opacity: 0.88; }
+
+    /* ── HERO ── */
+    #hero {
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 7rem 2rem 5rem;
+      position: relative; overflow: hidden;
+    }
+    #hero::before {
+      content: ''; position: absolute; top: 25%; left: 50%; transform: translateX(-50%);
+      width: 700px; height: 400px; border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(255,255,255,0.04) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    .eyebrow { font-size: 0.78rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 1.75rem; }
+
+    h1 { font-size: clamp(2.8rem, 6vw, 5rem); font-weight: 700; letter-spacing: -0.04em; line-height: 1.06; max-width: 780px; color: var(--text); }
+
+    .hero-sub { font-size: clamp(0.95rem, 1.8vw, 1.1rem); color: var(--text-2); max-width: 500px; margin: 1.75rem auto 2.75rem; line-height: 1.7; }
+
+    .hero-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      padding: 0.7rem 1.6rem;
+      background: var(--text); color: var(--bg);
+      border-radius: var(--radius);
+      font-size: 0.95rem; font-weight: 600; text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .btn-primary:hover { opacity: 0.88; }
+
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      padding: 0.7rem 1.6rem; color: var(--muted); text-decoration: none;
+      font-size: 0.95rem; font-weight: 500;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      transition: border-color .15s, color .15s;
+    }
+    .btn-secondary:hover { border-color: #444; color: var(--text); }
+
+    .trust-badges { margin-top: 2.75rem; font-size: 0.775rem; color: var(--muted); letter-spacing: 0.02em; }
+
+    /* ── SECTION SHARED ── */
+    section { padding: 6rem 2rem; }
+    .inner { max-width: 1080px; margin: 0 auto; }
+    .s-label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.6rem; }
+    .s-title { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.2; }
+    .s-sub { font-size: 0.95rem; color: var(--text-2); line-height: 1.7; margin-top: 0.6rem; }
+
+    /* ── DEMO ── */
+    #demo { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    #demo .head { margin-bottom: 2.5rem; }
+
+    /* ── VS CODE MOCKUP ── */
+    .vscode-window {
+      height: 580px; display: flex; flex-direction: column;
+      border-radius: var(--radius-lg); overflow: hidden;
+      border: 1px solid var(--vs-edge);
+      box-shadow: 0 32px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.03);
+    }
+
+    /* Title bar */
+    .vs-titlebar {
+      height: 32px; background: var(--vs-bar); display: flex; align-items: center;
+      padding: 0 1rem; gap: 0.5rem; border-bottom: 1px solid var(--vs-edge); flex-shrink: 0;
+    }
+    .vs-dots { display: flex; gap: 6px; }
+    .vs-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .vs-dot.r { background: #ff5f57; }
+    .vs-dot.y { background: #febc2e; }
+    .vs-dot.g { background: #28c840; }
+    .vs-wintitle { flex: 1; text-align: center; font-size: 0.7rem; color: #555; font-family: var(--font); }
+
+    /* Body: actbar + sidebar + editor */
+    .vs-body { display: flex; flex: 1; overflow: hidden; }
+
+    /* Activity bar */
+    .vs-actbar {
+      width: 46px; background: var(--vs-bar); display: flex; flex-direction: column;
+      align-items: center; padding: 0.4rem 0; border-right: 1px solid var(--vs-edge); flex-shrink: 0; gap: 2px;
+    }
+    .vs-ab-icon {
+      width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+      color: #444; cursor: pointer; border-left: 2px solid transparent; transition: color .15s;
+    }
+    .vs-ab-icon:hover { color: #777; }
+    .vs-ab-icon.active { color: #ddd; border-left-color: #ddd; }
+    .vs-ab-icon svg { width: 20px; height: 20px; }
+
+    /* Sidebar */
+    .vs-sidebar {
+      width: 210px; background: var(--vs-panel); border-right: 1px solid var(--vs-edge);
+      overflow-y: auto; flex-shrink: 0; display: flex; flex-direction: column;
+    }
+    .vs-sidebar-title {
+      padding: 0.65rem 0.75rem 0.3rem; font-size: 0.68rem; font-weight: 700;
+      letter-spacing: 0.1em; color: #999; text-transform: uppercase; flex-shrink: 0;
+    }
+    .vs-tree-cat {
+      display: flex; align-items: center; gap: 0.3rem; padding: 0.28rem 0.5rem;
+      font-size: 0.76rem; font-weight: 600; color: #bbb; user-select: none;
+    }
+    .vs-arrow { font-size: 0.55rem; color: #555; margin-right: 1px; }
+    .vs-tree-file {
+      padding: 0.25rem 0.75rem 0.25rem 1.6rem; font-size: 0.76rem; color: #777;
+      cursor: pointer; display: flex; align-items: center; gap: 0.4rem;
+      transition: background .1s, color .1s; border-left: 2px solid transparent;
+      user-select: none;
+    }
+    .vs-tree-file:hover { background: rgba(255,255,255,0.05); color: #ccc; }
+    .vs-tree-file.active { background: rgba(255,255,255,0.09); color: #eee; border-left-color: #666; }
+
+    /* Editor area */
+    .vs-editor-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    .vs-editorbar { display: flex; background: var(--vs-tabs); border-bottom: 1px solid var(--vs-edge); flex-shrink: 0; height: 34px; }
+    .vs-etab {
+      display: flex; align-items: center; gap: 0.5rem; padding: 0 1rem;
+      font-size: 0.78rem; color: #666; border-right: 1px solid var(--vs-edge); cursor: default;
+      white-space: nowrap;
+    }
+    .vs-etab.active { color: #ddd; background: var(--vs-bg); border-top: 1px solid #888; }
+    .vs-etab-x { font-size: 0.66rem; opacity: 0.4; }
+    .vs-content { flex: 1; display: flex; overflow: hidden; }
+
+    /* Editor pane (left) */
+    .vs-editpane { display: flex; flex: 1; overflow: hidden; border-right: 1px solid var(--vs-edge); min-width: 0; }
+    .vs-gutter {
+      width: 40px; background: var(--vs-bg); padding: 0.6rem 0.6rem 0 0;
+      text-align: right; font-family: var(--mono); font-size: 0.72rem;
+      line-height: 1.8; color: #363636; user-select: none; flex-shrink: 0;
+      overflow: hidden; white-space: pre;
+    }
+    .vs-code {
+      flex: 1; background: var(--vs-bg); color: #d4d4d4;
+      font-family: var(--mono); font-size: 0.72rem; line-height: 1.8;
+      border: none; outline: none; resize: none; padding: 0.6rem 0.5rem;
+      min-width: 0;
+    }
+    .vs-code::selection { background: rgba(255,255,255,0.12); }
+
+    /* Preview pane (right) */
+    .vs-prevpane { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    .vs-prevheader {
+      padding: 0.35rem 1rem; font-size: 0.68rem; color: #444; background: var(--vs-bg);
+      border-bottom: 1px solid var(--vs-edge); display: flex; align-items: center;
+      justify-content: space-between; flex-shrink: 0; font-family: var(--mono);
+    }
+    .vs-live-ind { display: flex; align-items: center; gap: 0.3rem; color: #4a9a6a; font-size: 0.65rem; }
+    .vs-live-dot { width: 5px; height: 5px; border-radius: 50%; background: #4a9a6a; animation: livepulse 2.2s ease infinite; }
+    .vs-prevbody { flex: 1; overflow-y: auto; padding: 1rem 1.25rem; font-size: 0.82rem; line-height: 1.75; background: var(--vs-bg); color: #c8c8c8; }
+
+    /* Markdown rendered (in vs-prevbody) */
+    .vs-prevbody h1, .vs-prevbody h2, .vs-prevbody h3 { font-weight: 700; letter-spacing: -0.02em; color: #eee; margin-bottom: 0.4rem; margin-top: 1.25rem; }
+    .vs-prevbody h1 { font-size: 1.35rem; }
+    .vs-prevbody h2 { font-size: 1.05rem; }
+    .vs-prevbody p { color: #bbb; margin-bottom: 0.65rem; }
+    .vs-prevbody code { font-family: var(--mono); font-size: 0.82em; background: var(--vs-panel); border: 1px solid var(--vs-edge); border-radius: 3px; padding: 0.1em 0.4em; color: #aaa; }
+    .vs-prevbody pre { background: var(--vs-panel); border: 1px solid var(--vs-edge); border-radius: var(--radius); padding: 0.75rem; overflow-x: auto; margin-bottom: 0.65rem; }
+    .vs-prevbody pre code { background: none; border: none; padding: 0; color: #bbb; }
+    .vs-prevbody ul, .vs-prevbody ol { padding-left: 1.3rem; color: #bbb; margin-bottom: 0.65rem; }
+    .vs-prevbody li { margin-bottom: 0.15rem; }
+    .vs-prevbody strong { color: #eee; font-weight: 600; }
+    .vs-prevbody blockquote { border-left: 2px solid var(--vs-edge); padding-left: 0.85rem; color: #666; margin-bottom: 0.65rem; }
+    .vs-prevbody a { color: #888; }
+
+    /* Mermaid container inside preview */
+    .vs-mmd-out { display: flex; align-items: center; justify-content: center; min-height: 280px; }
+    .vs-mmd-out svg { max-width: 100%; max-height: 360px; }
+
+    /* Canvas full-width */
+    .vs-canvas { flex: 1; position: relative; background: #1e1e2e; overflow: hidden; }
+    #excalidraw-root { position: absolute; inset: 0; background: #1e1e2e; }
+
+    /* Loading spinner (overlays excalidraw-root) */
+    .vs-spinner-wrap {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 1rem;
+      color: #555; font-size: 0.82rem; font-family: var(--font); z-index: 5;
+    }
+    .vs-spinner { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #2a2a3e; border-top-color: #6b6b8a; animation: spin 0.8s linear infinite; }
+
+    /* Status bar */
+    .vs-statusbar {
+      height: 22px; background: var(--vs-panel); border-top: 1px solid var(--vs-edge);
+      display: flex; align-items: center; padding: 0 0.75rem; gap: 1.5rem;
+      font-size: 0.66rem; color: #444; flex-shrink: 0; font-family: var(--mono);
+    }
+    .vs-status-ok { color: #4a9a6a; }
+
+    /* ── FEATURES ── */
+    #features .head { margin-bottom: 3rem; }
+    .f-list {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1px; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+    }
+    .f-item {
+      padding: 2rem; background: var(--card); border-right: 1px solid var(--border);
+      border-top: 2px solid transparent; transition: background 0.2s, border-top-color 0.2s;
+    }
+    .f-item:last-child { border-right: none; }
+    .f-item:hover { background: #1a1a1a; border-top-color: var(--subtle); }
+    .f-num { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-bottom: 1rem; }
+    .f-name { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .f-desc { font-size: 0.875rem; color: var(--text-2); line-height: 1.65; }
+    .f-desc code { font-family: var(--mono); font-size: 0.85em; color: #888; }
+
+    /* ── INSTALL ── */
+    #install { background: var(--surface); border-top: 1px solid var(--border); }
+    #install .head { margin-bottom: 3rem; }
+    .steps { display: flex; flex-direction: column; max-width: 640px; position: relative; }
+    .steps::before {
+      content: ''; position: absolute; left: 15px; top: 40px; bottom: 40px; width: 1px;
+      background: linear-gradient(to bottom, var(--border) 60%, transparent 100%); pointer-events: none;
+    }
+    .step { display: flex; gap: 1.5rem; padding: 1.5rem 0; border-bottom: 1px solid var(--border); }
+    .step:last-child { border-bottom: none; }
+    .step-n {
+      flex-shrink: 0; width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; font-weight: 600; color: var(--muted);
+      font-family: var(--mono); margin-top: 0.15rem;
+      background: var(--surface); position: relative; z-index: 1;
+    }
+    .step-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.3rem; }
+    .step-desc { font-size: 0.875rem; color: var(--text-2); line-height: 1.6; }
+    kbd {
+      display: inline-block; margin-top: 0.5rem;
+      font-family: var(--mono); font-size: 0.78rem; color: #aaa;
+      background: var(--card); border: 1px solid #2e2e2e; border-bottom: 2px solid #2e2e2e;
+      border-radius: 5px; padding: 0.2rem 0.65rem; box-shadow: inset 0 -1px 0 #1a1a1a;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border); padding: 2rem 2.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.82rem; color: var(--muted);
+    }
+    footer a { color: var(--muted); text-decoration: none; transition: color 0.15s; }
+    footer a:hover { color: var(--text); }
+    .f-links { display: flex; gap: 1.75rem; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 800px) {
+      .vscode-window { height: auto; }
+      .vs-body { height: 500px; }
+      .vs-actbar { display: none; }
+      .vs-sidebar { width: 140px; }
+      .vs-content { flex-direction: column; overflow-y: auto; }
+      .vs-editpane { flex: none; height: 200px; border-right: none; border-bottom: 1px solid var(--vs-edge); }
+      .vs-prevpane { flex: none; height: 200px; }
+      .vs-canvas { flex: none; height: 360px; }
+    }
+    @media (max-width: 560px) {
+      .vs-sidebar { display: none; }
+      .vs-body { height: 460px; }
+      .vs-editpane { height: 170px; }
+      .vs-prevpane { height: 170px; }
+      .vs-canvas { height: 320px; }
+    }
+    @media (max-width: 500px) {
+      nav { padding: 0 1.25rem; }
+      .nav-right a:not(.btn-install) { display: none; }
+      .steps::before { display: none; }
+      .f-list { grid-template-columns: 1fr; }
+      .f-item { border-right: none; border-bottom: 1px solid var(--border); }
+      footer { flex-direction: column; gap: 1rem; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav id="nav">
+    <div class="nav-logo">Docspace <span>for VS Code</span></div>
+    <div class="nav-right">
+      <a href="#demo">Try it</a>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#install" class="btn-install">Install Free</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section id="hero">
+    <div class="eyebrow">VS Code Extension</div>
+    <h1>Your documentation<br>workspace</h1>
+    <p class="hero-sub">
+      Markdown previews, Mermaid diagrams, and Excalidraw canvases —
+      live, organized, and fully integrated into VS Code.
+    </p>
+    <div class="hero-actions">
+      <a href="#install" class="btn-primary">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14Z"/>
+          <path d="M7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.969a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.749.749 0 0 1-1.06 0L4.22 6.78a.749.749 0 1 1 1.06-1.06z"/>
+        </svg>
+        Install Extension
+      </a>
+      <a href="#demo" class="btn-secondary">Try the demo →</a>
+    </div>
+    <p class="trust-badges">Free &amp; open source &nbsp;·&nbsp; No config required &nbsp;·&nbsp; VS Code 1.85+</p>
+  </section>
+
+  <!-- DEMO -->
+  <section id="demo">
+    <div class="inner">
+      <div class="head">
+        <div class="s-label">Interactive demo</div>
+        <h2 class="s-title">See the extension in action</h2>
+        <p class="s-sub">Click any file in the sidebar — the same experience you get inside VS Code.</p>
+      </div>
+
+      <!-- VS Code window mockup -->
+      <div class="vscode-window reveal">
+
+        <!-- Title bar -->
+        <div class="vs-titlebar">
+          <div class="vs-dots">
+            <span class="vs-dot r"></span>
+            <span class="vs-dot y"></span>
+            <span class="vs-dot g"></span>
+          </div>
+          <span class="vs-wintitle" id="vs-wintitle">README.md — Docspace — Visual Studio Code</span>
+        </div>
+
+        <!-- Body -->
+        <div class="vs-body">
+
+          <!-- Activity bar -->
+          <div class="vs-actbar">
+            <!-- Explorer -->
+            <div class="vs-ab-icon" title="Explorer">
+              <svg viewBox="0 0 16 16" fill="currentColor">
+                <path d="M13.71 4.29l-3-3L10 1H4L3 2v12l1 1h9l1-1V5l-.29-.71zM13 14H4V2h5v4h4v8zm-4-9V2.5l3.5 3.5H9z"/>
+              </svg>
+            </div>
+            <!-- Search -->
+            <div class="vs-ab-icon" title="Search">
+              <svg viewBox="0 0 16 16" fill="currentColor">
+                <path d="M15.25 14.19l-3.61-3.62a6.15 6.15 0 1 0-1.06 1.06l3.61 3.61.94-.94-.88-.11zM2 6.5A4.5 4.5 0 1 1 6.5 11 4.5 4.5 0 0 1 2 6.5z"/>
+              </svg>
+            </div>
+            <!-- Docspace (active) -->
+            <div class="vs-ab-icon active" title="Docspace" style="font-size:1.25rem; font-family:var(--font);">⬡</div>
+            <!-- Source Control -->
+            <div class="vs-ab-icon" title="Source Control">
+              <svg viewBox="0 0 16 16" fill="currentColor">
+                <path d="M5 2.5a2.5 2.5 0 1 0-2 2.462V10.5a2.5 2.5 0 1 0 2 0V4.962A2.5 2.5 0 0 0 5 2.5zM3.5 3.5a1 1 0 1 1 2 0 1 1 0 0 1-2 0zm1 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6-8A1.5 1.5 0 1 0 9 4.5V7L7 9v3.5A1.5 1.5 0 1 0 8 12.5V9.4l2-2V4.5A1.5 1.5 0 0 0 10.5 2.5z"/>
+              </svg>
+            </div>
+            <!-- Extensions -->
+            <div class="vs-ab-icon" title="Extensions">
+              <svg viewBox="0 0 16 16" fill="currentColor">
+                <path d="M3 6h2V4a2 2 0 0 1 4 0v2h2a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm2 0h4V4a2 2 0 0 0-4 0v2z" opacity=".4"/>
+                <path d="M3 6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H9V4a2 2 0 0 0-4 0v2H3z"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Sidebar — Docspace panel -->
+          <div class="vs-sidebar">
+            <div class="vs-sidebar-title">Docspace</div>
+            <div>
+              <div class="vs-tree-cat"><span class="vs-arrow">▾</span> Docs</div>
+              <div class="vs-tree-file active" data-scene="md" data-label="README.md">📄 README.md</div>
+              <div class="vs-tree-file" data-scene="md2" data-label="guide.md">📄 guide.md</div>
+              <div class="vs-tree-cat"><span class="vs-arrow">▾</span> Diagrams</div>
+              <div class="vs-tree-file" data-scene="mmd" data-label="architecture.mmd">⬡ architecture.mmd</div>
+              <div class="vs-tree-cat"><span class="vs-arrow">▾</span> Canvas</div>
+              <div class="vs-tree-file" data-scene="canvas" data-label="sketch.excalidraw">✦ sketch.excalidraw</div>
+            </div>
+          </div>
+
+          <!-- Editor area -->
+          <div class="vs-editor-area">
+            <!-- Editor tab bar -->
+            <div class="vs-editorbar">
+              <div class="vs-etab active">
+                <span id="vs-etab-name">📄 README.md</span>
+                <span class="vs-etab-x">✕</span>
+              </div>
+            </div>
+            <!-- Content rendered by JS -->
+            <div class="vs-content" id="vs-content"></div>
+          </div>
+        </div>
+
+        <!-- Status bar -->
+        <div class="vs-statusbar">
+          <span class="vs-status-ok">$(check) Docspace: OK</span>
+          <span id="vs-lang">Markdown</span>
+          <span>UTF-8</span>
+          <span id="vs-cursor">Ln 1, Col 1</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="inner">
+      <div class="head">
+        <div class="s-label">Capabilities</div>
+        <h2 class="s-title">Three formats, one panel</h2>
+        <p class="s-sub">Everything your documentation needs, without leaving the editor.</p>
+      </div>
+      <div class="f-list">
+        <div class="f-item reveal">
+          <div class="f-num">01</div>
+          <div class="f-name">Write</div>
+          <p class="f-desc">
+            Open any <code>.md</code> file and get a live side-by-side preview.
+            Mermaid blocks inside markdown are rendered inline with pan &amp; zoom.
+            Six diagram themes including auto dark/light.
+          </p>
+        </div>
+        <div class="f-item reveal reveal-d1">
+          <div class="f-num">02</div>
+          <div class="f-name">Draw</div>
+          <p class="f-desc">
+            <code>.excalidraw</code> files open as a full canvas editor — integrated
+            with VS Code's undo, redo, Ctrl+S, and rename. Saved as human-readable
+            JSON that works seamlessly with version control.
+          </p>
+        </div>
+        <div class="f-item reveal reveal-d2">
+          <div class="f-num">03</div>
+          <div class="f-name">Organize</div>
+          <p class="f-desc">
+            Auto mode discovers docs across your entire workspace. Folder mode keeps
+            everything under <code>.docspace/</code> with automatic scaffolding.
+            Create, rename, and delete files from the sidebar.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSTALL -->
+  <section id="install">
+    <div class="inner">
+      <div class="head">
+        <div class="s-label">Setup</div>
+        <h2 class="s-title">Install in 30 seconds</h2>
+        <p class="s-sub">No configuration required.</p>
+      </div>
+      <div class="steps reveal">
+        <div class="step">
+          <div class="step-n">1</div>
+          <div>
+            <div class="step-title">Open VS Code</div>
+            <p class="step-desc">Version 1.85 or later required.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">2</div>
+          <div>
+            <div class="step-title">Open Extensions</div>
+            <p class="step-desc">Press the keyboard shortcut to open the Extensions panel.</p>
+            <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>X</kbd>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">3</div>
+          <div>
+            <div class="step-title">Search for Docspace</div>
+            <p class="step-desc">Type in the search box:</p>
+            <kbd>Docspace</kbd>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">4</div>
+          <div>
+            <div class="step-title">Click Install</div>
+            <p class="step-desc">The ⬡ icon appears in your Activity Bar immediately. No reload needed.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <span>Docspace &nbsp;·&nbsp; Free VS Code extension</span>
+    <div class="f-links">
+      <a href="#install">Marketplace</a>
+      <a href="#demo">Try it</a>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14/dist/markdown-it.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+
+  <script>
+    // ── Nav scroll ─────────────────────────────────────────
+    const navEl = document.getElementById('nav');
+    window.addEventListener('scroll', () => {
+      navEl.classList.toggle('scrolled', window.scrollY > 10);
+    }, { passive: true });
+
+    // ── Scroll reveal ──────────────────────────────────────
+    const revealObs = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); revealObs.unobserve(e.target); } });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.reveal').forEach(el => revealObs.observe(el));
+
+    // ── Mermaid init ───────────────────────────────────────
+    mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+
+    // ── VS Code Demo ───────────────────────────────────────
+    const mdIt = markdownit({ html: false, linkify: true, typographer: true });
+
+    const SCENES = {
+      md: {
+        label: 'README.md', icon: '📄', lang: 'Markdown',
+        code: '# Docspace\n\nA documentation workspace built **inside VS Code**.\n\n## What you can do\n\n- Write markdown with **live preview**\n- Create Mermaid diagrams from code\n- Sketch with Excalidraw canvas\n\n## Getting started\n\nInstall the extension, then click the ⬡ icon in the Activity Bar.\n\n> Your docs live where your code does.\n\n```bash\ncode --install-extension docspace\n```',
+      },
+      md2: {
+        label: 'guide.md', icon: '📄', lang: 'Markdown',
+        code: '# Quick Guide\n\n## Auto mode\n\nDocspace scans your entire workspace for `.md`, `.mmd`,\nand `.excalidraw` files automatically.\n\n## Folder mode\n\nSwitch to folder mode to keep everything under `.docspace/`.\nSubfolders become categories in the sidebar.\n\n> No configuration file needed.',
+      },
+      mmd: {
+        label: 'architecture.mmd', icon: '⬡', lang: 'Mermaid Diagram',
+        code: 'graph TD\n    Client["🌐 Client"]\n    API["⚡ API Gateway"]\n    Auth["🔒 Auth Service"]\n    DB[("🗄️ Database")]\n    Cache["⚡ Cache"]\n\n    Client --> API\n    API --> Auth\n    Auth --> DB\n    API --> Cache\n    Cache --> DB\n\n    style Client fill:#1a1a1a,stroke:#444,color:#f0f0f0\n    style API fill:#1a1a1a,stroke:#444,color:#f0f0f0\n    style Auth fill:#1a1a1a,stroke:#444,color:#f0f0f0\n    style DB fill:#1a1a1a,stroke:#444,color:#f0f0f0\n    style Cache fill:#1a1a1a,stroke:#444,color:#f0f0f0',
+      },
+      canvas: {
+        label: 'sketch.excalidraw', icon: '✦', lang: 'Excalidraw',
+      },
+    };
+
+    let mmdTimer, mmdId = 0;
+
+    function syncGutter(ta, g) {
+      const n = ta.value.split('\n').length;
+      g.textContent = Array.from({ length: n }, (_, i) => i + 1).join('\n');
+    }
+
+    function updateCursor(ta) {
+      const before = ta.value.slice(0, ta.selectionStart);
+      const lines = before.split('\n');
+      const cursorEl = document.getElementById('vs-cursor');
+      if (cursorEl) { cursorEl.textContent = `Ln ${lines.length}, Col ${lines[lines.length - 1].length + 1}`; }
+    }
+
+    async function vsMermaid(code) {
+      clearTimeout(mmdTimer);
+      mmdTimer = setTimeout(async () => {
+        const out = document.getElementById('vs-mmd-out');
+        if (!out) { return; }
+        const trimmed = code.trim();
+        if (!trimmed) { out.innerHTML = ''; return; }
+        try {
+          const id = 'vsmmd' + (++mmdId);
+          const { svg } = await mermaid.render(id, trimmed);
+          if (document.getElementById('vs-mmd-out')) { out.innerHTML = svg; }
+        } catch (e) {
+          if (document.getElementById('vs-mmd-out')) {
+            out.innerHTML = `<span style="font-family:var(--mono);font-size:.72rem;color:#e05a5a">${e.message || 'Syntax error'}</span>`;
+          }
+        }
+      }, 400);
+    }
+
+    function mountSplit(scene, renderFn) {
+      const vsContent = document.getElementById('vs-content');
+      const isMmd = scene.lang === 'Mermaid Diagram';
+      vsContent.innerHTML = `
+        <div class="vs-editpane">
+          <div class="vs-gutter" id="vs-gutter"></div>
+          <textarea class="vs-code" id="vs-code" spellcheck="false"></textarea>
+        </div>
+        <div class="vs-prevpane">
+          <div class="vs-prevheader">
+            <span>${isMmd ? 'rendered' : 'preview'}</span>
+            <span class="vs-live-ind"><span class="vs-live-dot"></span>live</span>
+          </div>
+          <div class="vs-prevbody" id="vs-prevbody">${isMmd ? '<div class="vs-mmd-out" id="vs-mmd-out"></div>' : ''}</div>
+        </div>`;
+      const ta = document.getElementById('vs-code');
+      const gutter = document.getElementById('vs-gutter');
+      ta.value = scene.code;
+      syncGutter(ta, gutter);
+      updateCursor(ta);
+      renderFn(ta.value);
+      ta.addEventListener('input', () => { syncGutter(ta, gutter); renderFn(ta.value); updateCursor(ta); });
+      ta.addEventListener('click', () => updateCursor(ta));
+      ta.addEventListener('keyup', () => updateCursor(ta));
+    }
+
+    function switchScene(key) {
+      const scene = SCENES[key];
+      if (!scene) { return; }
+
+      document.querySelectorAll('.vs-tree-file').forEach(f => f.classList.toggle('active', f.dataset.scene === key));
+      document.getElementById('vs-wintitle').textContent = `${scene.label} — Docspace — Visual Studio Code`;
+      document.getElementById('vs-etab-name').textContent = `${scene.icon} ${scene.label}`;
+      document.getElementById('vs-lang').textContent = scene.lang;
+      const cur = document.getElementById('vs-cursor');
+      if (cur) { cur.textContent = 'Ln 1, Col 1'; }
+
+      const vsContent = document.getElementById('vs-content');
+
+      if (key === 'canvas') {
+        vsContent.innerHTML = `
+          <div class="vs-canvas">
+            <div id="excalidraw-root"></div>
+            <div class="vs-spinner-wrap" id="vs-canvas-loading">
+              <div class="vs-spinner"></div>
+              <span>Loading Excalidraw…</span>
+            </div>
+          </div>`;
+        loadExcalidraw();
+        return;
+      }
+
+      if (key === 'mmd') {
+        mountSplit(scene, (code) => { vsMermaid(code); });
+        vsMermaid(scene.code);
+        return;
+      }
+
+      mountSplit(scene, (code) => {
+        const out = document.getElementById('vs-prevbody');
+        if (out) { out.innerHTML = mdIt.render(code); }
+      });
+    }
+
+    document.querySelectorAll('.vs-tree-file').forEach(f => {
+      f.addEventListener('click', () => switchScene(f.dataset.scene));
+    });
+
+    switchScene('md');
+
+    // ── Excalidraw lazy load ───────────────────────────────
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src; s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    async function loadExcalidraw() {
+      if (!document.getElementById('excalidraw-root')) { return; }
+      try {
+        if (!window.ExcalidrawLib) {
+          window.EXCALIDRAW_ASSET_PATH = 'https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw/dist/';
+          await loadScript('https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js');
+          await loadScript('https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js');
+          await loadScript('https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw/dist/excalidraw.production.min.js');
+        }
+        const { Excalidraw } = window.ExcalidrawLib;
+        const rEl = document.getElementById('excalidraw-root');
+        if (!rEl) { return; }
+
+        const initialData = {
+          elements: [
+            { type: 'rectangle', id: 'r1', x: 60,  y: 120, width: 140, height: 56, strokeColor: '#6b6b8a', backgroundColor: '#2a2a3e', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, roundness: { type: 3 }, version: 1, versionNonce: 1,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false },
+            { type: 'rectangle', id: 'r2', x: 300, y: 120, width: 160, height: 56, strokeColor: '#6b6b8a', backgroundColor: '#2a2a3e', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, roundness: { type: 3 }, version: 1, versionNonce: 2,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false },
+            { type: 'rectangle', id: 'r3', x: 560, y: 120, width: 140, height: 56, strokeColor: '#6b6b8a', backgroundColor: '#2a2a3e', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, roundness: { type: 3 }, version: 1, versionNonce: 3,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false },
+            { type: 'rectangle', id: 'r4', x: 300, y: 240, width: 160, height: 56, strokeColor: '#6b6b8a', backgroundColor: '#2a2a3e', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, roundness: { type: 3 }, version: 1, versionNonce: 9,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false },
+            { type: 'text', id: 't1', x: 75,  y: 141, text: '🌐 Client',     fontSize: 15, fontFamily: 1, textAlign: 'left', verticalAlign: 'top', strokeColor: '#c8c8e0', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1, roughness: 0, opacity: 100, version: 1, versionNonce: 4,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, containerId: null },
+            { type: 'text', id: 't2', x: 320, y: 141, text: '⚡ API Server', fontSize: 15, fontFamily: 1, textAlign: 'left', verticalAlign: 'top', strokeColor: '#c8c8e0', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1, roughness: 0, opacity: 100, version: 1, versionNonce: 5,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, containerId: null },
+            { type: 'text', id: 't3', x: 578, y: 141, text: '🗄 Database',   fontSize: 15, fontFamily: 1, textAlign: 'left', verticalAlign: 'top', strokeColor: '#c8c8e0', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1, roughness: 0, opacity: 100, version: 1, versionNonce: 6,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, containerId: null },
+            { type: 'text', id: 't4', x: 326, y: 261, text: '🔒 Auth',       fontSize: 15, fontFamily: 1, textAlign: 'left', verticalAlign: 'top', strokeColor: '#c8c8e0', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1, roughness: 0, opacity: 100, version: 1, versionNonce: 10, isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, containerId: null },
+            { type: 'arrow', id: 'a1', x: 200, y: 148, points: [[0,0],[100,0]], strokeColor: '#4a4a6a', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, version: 1, versionNonce: 7,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, startBinding: null, endBinding: null },
+            { type: 'arrow', id: 'a2', x: 460, y: 148, points: [[0,0],[100,0]], strokeColor: '#4a4a6a', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, version: 1, versionNonce: 8,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, startBinding: null, endBinding: null },
+            { type: 'arrow', id: 'a3', x: 380, y: 176, points: [[0,0],[0,64]],  strokeColor: '#4a4a6a', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, version: 1, versionNonce: 11, isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, startBinding: null, endBinding: null },
+          ],
+          appState: { gridSize: 20, theme: 'dark', viewBackgroundColor: '#1e1e2e' },
+          scrollToContent: true,
+        };
+
+        const domRoot = ReactDOM.createRoot(rEl);
+        domRoot.render(React.createElement(Excalidraw, {
+          initialData,
+          theme: 'dark',
+          excalidrawAPI: (api) => {
+            // Delay ensures updateScene runs after Excalidraw's internal re-renders
+            setTimeout(() => {
+              api.updateScene({ appState: { theme: 'dark', viewBackgroundColor: '#1e1e2e' } });
+            }, 50);
+            // Inject overrides AFTER Excalidraw mounts its own styles, so ours win
+            const prev = document.getElementById('exc-overrides');
+            if (prev) { prev.remove(); }
+            const s = document.createElement('style');
+            s.id = 'exc-overrides';
+            s.textContent = [
+              '.excalidraw .App-bottom-bar { display: none !important; }',
+              '.excalidraw .layer-ui__wrapper__top-right { display: none !important; }',
+              '.excalidraw { --editor-container-padding: 0px !important; }',
+              '.excalidraw .FixedSideContainer_side_top { top: 0 !important; left: 0 !important; right: 0 !important; }',
+            ].join('\n');
+            document.head.appendChild(s);
+          },
+          UIOptions: {
+            canvasActions: {
+              changeViewBackgroundColor: false,
+              clearCanvas: false,
+              export: false,
+              loadScene: false,
+              saveToActiveFile: false,
+              toggleTheme: false,
+              saveAsImage: false,
+            },
+            tools: { image: false },
+            dockedSidebarBreakpoint: 0,
+          },
+        }));
+
+        setTimeout(() => {
+          const lEl = document.getElementById('vs-canvas-loading');
+          if (lEl) { lEl.style.display = 'none'; }
+        }, 800);
+      } catch (err) {
+        const lEl = document.getElementById('vs-canvas-loading');
+        if (lEl) { lEl.innerHTML = '<span style="color:#6b6b8a;font-size:.8rem">Failed to load canvas. Check your connection.</span>'; }
+      }
+    }
+
+  </script>
+</body>
+</html>
