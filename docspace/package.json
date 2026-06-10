@@ -1,8 +1,8 @@
 {
-  "name": "docspace",
-  "displayName": "Docspace",
+  "name": "docspace-workspace",
+  "displayName": "Docspace Workspace",
   "description": "Visualize and manage Markdown, Mermaid diagrams and Excalidraw canvases inside VS Code.",
-  "publisher": "docspace",
+  "publisher": "ArthurSilv4",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.120.0"
@@ -18,16 +18,16 @@
     "commands": [
       {
         "command": "docspace.openPreview",
-        "title": "Visualizar"
+        "title": "Open Preview"
       },
       {
         "command": "docspace.selectDiagramTheme",
-        "title": "Mudar tema dos diagramas",
+        "title": "Change Diagram Theme",
         "icon": "$(symbol-color)"
       },
       {
         "command": "docspace.selectMode",
-        "title": "Mudar modo de descoberta",
+        "title": "Change Discovery Mode",
         "icon": "$(gear)"
       },
       {

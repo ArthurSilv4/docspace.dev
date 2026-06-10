@@ -7,12 +7,14 @@ import { PreviewPanel } from './previewPanel.js';
 import { CanvasEditorProvider } from './canvasEditor.js';
 import { WorkspaceTreeItem } from './treeItem.js';
 
+const RELEVANT_FILE = /\.(md|mmd|excalidraw)$/i;
+
 async function createFile(
 	item: WorkspaceTreeItem | undefined,
 	ext: string,
 	buildContent: (name: string) => string,
 	prompt: string,
-	refresh: () => void,
+	onCreated: (uri: vscode.Uri) => void,
 ): Promise<void> {
 	const baseUri = item?.uri ?? workspaceRoot();
 	if (!baseUri) { vscode.window.showErrorMessage('No workspace open.'); return; }
@@ -27,7 +29,7 @@ async function createFile(
 	const filename = input.endsWith(`.${ext}`) ? input : `${input}.${ext}`;
 	const fileUri = vscode.Uri.joinPath(baseUri, filename);
 	await vscode.workspace.fs.writeFile(fileUri, Buffer.from(buildContent(filename), 'utf8'));
-	refresh();
+	onCreated(fileUri);
 	if (ext === 'excalidraw') {
 		await vscode.commands.executeCommand('vscode.openWith', fileUri, 'docspace.canvasEditor');
 	} else {
@@ -35,68 +37,63 @@ async function createFile(
 	}
 }
 
-export function activate(context: vscode.ExtensionContext): void {
-	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-	statusBarItem.text = '$(check) docspace: OK';
-	statusBarItem.tooltip = 'docspace.dev-extension ativo e funcionando';
-	statusBarItem.show();
-	context.subscriptions.push(statusBarItem);
+/**
+ * Invalidate the tree for workspace file operations (delete/rename) that the
+ * scoped watcher may miss — e.g. folders, whose children events are provider
+ * dependent. Irrelevant single files (with an extension) are ignored.
+ */
+function invalidateIfRelevant(provider: DocspaceProvider, uris: readonly vscode.Uri[]): void {
+	for (const uri of uris) {
+		if (RELEVANT_FILE.test(uri.fsPath) || !path.extname(uri.fsPath)) {
+			provider.invalidate(uri);
+		}
+	}
+}
 
-	const provider = new DocspaceProvider();
+function registerTreeEvents(context: vscode.ExtensionContext, provider: DocspaceProvider): void {
+	const watcher = vscode.workspace.createFileSystemWatcher('**/*.{md,mmd,excalidraw}');
+	context.subscriptions.push(
+		watcher,
+		watcher.onDidCreate((uri) => provider.invalidate(uri)),
+		watcher.onDidChange((uri) => provider.invalidate(uri)),
+		watcher.onDidDelete((uri) => provider.invalidate(uri)),
+		vscode.workspace.onDidDeleteFiles((e) => invalidateIfRelevant(provider, e.files)),
+		vscode.workspace.onDidRenameFiles((e) => {
+			invalidateIfRelevant(provider, e.files.map((f) => f.oldUri));
+			invalidateIfRelevant(provider, e.files.map((f) => f.newUri));
+		}),
+		vscode.workspace.onDidChangeConfiguration((e) => {
+			if (
+				e.affectsConfiguration('docspace.mode') ||
+				e.affectsConfiguration('docspace.rootFolder') ||
+				e.affectsConfiguration('docspace.exclude')
+			) {
+				provider.refreshAll();
+			}
+		}),
+	);
+}
+
+function registerCommands(context: vscode.ExtensionContext, provider: DocspaceProvider): void {
+	const onCreated = (uri: vscode.Uri) => provider.invalidate(uri);
 
 	context.subscriptions.push(
-		CanvasEditorProvider.register(context),
 		vscode.commands.registerCommand('docspace.openPreview', (uri: vscode.Uri) => {
 			PreviewPanel.createOrShow(context, uri);
 		}),
-		vscode.commands.registerCommand('docspace.selectDiagramTheme', async () => {
-			const current = vscode.workspace.getConfiguration('docspace').get<string>('diagramTheme', 'auto');
-			const picked = await vscode.window.showQuickPick(
-				[
-					{ label: '$(color-mode) Auto',    description: 'Segue o tema do VS Code (claro → default, escuro → dark)', value: 'auto' },
-					{ label: '$(symbol-color) Default', description: 'Tema padrão do Mermaid',          value: 'default' },
-					{ label: '$(moon) Dark',           description: 'Tema escuro',                       value: 'dark' },
-					{ label: '$(tree) Forest',         description: 'Tema floresta (tons de verde)',      value: 'forest' },
-					{ label: '$(circle-outline) Neutral', description: 'Tema neutro (tons de cinza)',    value: 'neutral' },
-					{ label: '$(paintcan) Base',       description: 'Tema base personalizável',          value: 'base' },
-				],
-				{ title: 'Docspace — tema dos diagramas', placeHolder: `Atual: ${current}` }
-			);
-			if (picked) {
-				await vscode.workspace.getConfiguration('docspace').update(
-					'diagramTheme', picked.value, vscode.ConfigurationTarget.Workspace
-				);
-			}
-		}),
-		vscode.commands.registerCommand('docspace.selectMode', async () => {
-			const current = getConfig().mode;
-			const picked = await vscode.window.showQuickPick(
-				[
-					{ label: '$(search) Auto', description: 'Descobre .md, .mmd e Mermaid em todo o workspace', value: 'auto' },
-					{ label: '$(folder) Folder', description: 'Usa a pasta .docspace (ou docspace.rootFolder) como fonte', value: 'folder' },
-				],
-				{ title: 'Docspace — modo de descoberta', placeHolder: `Atual: ${current}` }
-			);
-			if (picked) {
-				await vscode.workspace.getConfiguration('docspace').update(
-					'mode', picked.value, vscode.ConfigurationTarget.Workspace
-				);
-				if (picked.value === 'folder') {
-					await scaffoldFolderStructure(getConfig().rootFolder);
-				}
-			}
-		}),
+		vscode.commands.registerCommand('docspace.selectDiagramTheme', selectDiagramTheme),
+		vscode.commands.registerCommand('docspace.selectMode', selectMode),
 		vscode.commands.registerCommand('docspace.newMarkdown', (item?: WorkspaceTreeItem) =>
-			createFile(item, 'md', (n) => `# ${n.replace(/\.md$/, '')}\n`, 'Markdown filename', () => provider.refresh())
+			createFile(item, 'md', (n) => `# ${n.replace(/\.md$/, '')}\n`, 'Markdown filename', onCreated)
 		),
 		vscode.commands.registerCommand('docspace.newMermaid', (item?: WorkspaceTreeItem) =>
-			createFile(item, 'mmd', () => 'graph TD\n    A --> B\n', 'Mermaid filename', () => provider.refresh())
+			createFile(item, 'mmd', () => 'graph TD\n    A --> B\n', 'Mermaid filename', onCreated)
 		),
 		vscode.commands.registerCommand('docspace.newExcalidraw', (item?: WorkspaceTreeItem) =>
 			createFile(item, 'excalidraw', () => JSON.stringify({
 				type: 'excalidraw', version: 2, source: 'docspace', elements: [],
 				appState: { gridSize: 20 }, files: {},
-			}, null, 2), 'Canvas filename', () => provider.refresh())
+			}, null, 2), 'Canvas filename', onCreated)
 		),
 		vscode.commands.registerCommand('docspace.deleteFile', async (item?: WorkspaceTreeItem) => {
 			if (!item?.uri) { return; }
@@ -105,8 +102,8 @@ export function activate(context: vscode.ExtensionContext): void {
 				`Delete ${name}?`, { modal: true }, 'Delete'
 			);
 			if (confirm === 'Delete') {
-				await vscode.workspace.fs.delete(item.uri, { useTrash: true });
-				provider.refresh();
+				await vscode.workspace.fs.delete(item.uri, { recursive: true, useTrash: true });
+				provider.invalidate(item.uri);
 			}
 		}),
 		vscode.commands.registerCommand('docspace.renameFile', async (item?: WorkspaceTreeItem) => {
@@ -129,15 +126,59 @@ export function activate(context: vscode.ExtensionContext): void {
 				vscode.window.showErrorMessage('Falha ao renomear o arquivo.');
 			}
 		}),
-		vscode.window.registerTreeDataProvider('docspace.explorer', provider),
-		vscode.workspace.onDidCreateFiles(() => provider.refresh()),
-		vscode.workspace.onDidDeleteFiles(() => provider.refresh()),
-		vscode.workspace.onDidRenameFiles(() => provider.refresh()),
-		vscode.workspace.onDidSaveTextDocument(() => provider.refresh()),
-		vscode.workspace.onDidChangeConfiguration((e) => {
-			if (e.affectsConfiguration('docspace')) { provider.refresh(); }
-		}),
 	);
+}
+
+async function selectDiagramTheme(): Promise<void> {
+	const current = vscode.workspace.getConfiguration('docspace').get<string>('diagramTheme', 'auto');
+	const picked = await vscode.window.showQuickPick(
+		[
+			{ label: '$(color-mode) Auto',    description: 'Segue o tema do VS Code (claro → default, escuro → dark)', value: 'auto' },
+			{ label: '$(symbol-color) Default', description: 'Tema padrão do Mermaid',          value: 'default' },
+			{ label: '$(moon) Dark',           description: 'Tema escuro',                       value: 'dark' },
+			{ label: '$(tree) Forest',         description: 'Tema floresta (tons de verde)',      value: 'forest' },
+			{ label: '$(circle-outline) Neutral', description: 'Tema neutro (tons de cinza)',    value: 'neutral' },
+			{ label: '$(paintcan) Base',       description: 'Tema base personalizável',          value: 'base' },
+		],
+		{ title: 'Docspace — tema dos diagramas', placeHolder: `Atual: ${current}` }
+	);
+	if (picked) {
+		await vscode.workspace.getConfiguration('docspace').update(
+			'diagramTheme', picked.value, vscode.ConfigurationTarget.Workspace
+		);
+	}
+}
+
+async function selectMode(): Promise<void> {
+	const current = getConfig().mode;
+	const picked = await vscode.window.showQuickPick(
+		[
+			{ label: '$(search) Auto', description: 'Descobre .md, .mmd e Mermaid em todo o workspace', value: 'auto' },
+			{ label: '$(folder) Folder', description: 'Usa a pasta .docspace (ou docspace.rootFolder) como fonte', value: 'folder' },
+		],
+		{ title: 'Docspace — modo de descoberta', placeHolder: `Atual: ${current}` }
+	);
+	if (picked) {
+		await vscode.workspace.getConfiguration('docspace').update(
+			'mode', picked.value, vscode.ConfigurationTarget.Workspace
+		);
+		if (picked.value === 'folder') {
+			await scaffoldFolderStructure(getConfig().rootFolder);
+		}
+	}
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+	const provider = new DocspaceProvider();
+
+	context.subscriptions.push(
+		provider,
+		CanvasEditorProvider.register(context),
+		vscode.window.registerTreeDataProvider('docspace.explorer', provider),
+	);
+
+	registerCommands(context, provider);
+	registerTreeEvents(context, provider);
 }
 
 export function deactivate(): void { }

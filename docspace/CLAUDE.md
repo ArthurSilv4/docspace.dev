@@ -7,17 +7,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 docspace/
 ├── src/
-│   ├── extension.ts          # Entry point — activate() / deactivate() only
+│   ├── extension.ts          # Entry point — activate() registers commands, providers, watcher
 │   ├── config.ts             # getConfig(), workspaceRoot()
 │   ├── treeItem.ts           # WorkspaceTreeItem, ItemKind, FilterKey
-│   ├── fileFilter.ts         # isFileRelevant(), hasMermaidBlock()
+│   ├── fileFilter.ts         # isRelevantByName(), needsContentCheck(), isFileRelevant(), hasMermaidBlock()
 │   ├── dirReader.ts          # readDirChildren(), hasRelevantContent()
+│   ├── scanCache.ts          # discovery caches + per-path invalidation (invalidatePath, clearCaches)
 │   ├── folderMode.ts         # folderModeCategories(), scaffoldFolderStructure()
-│   ├── provider.ts           # DocspaceProvider (TreeDataProvider)
+│   ├── provider.ts           # DocspaceProvider (TreeDataProvider) — debounced refresh
 │   ├── previewPanel.ts       # PreviewPanel — native editor + webview preview
 │   ├── canvasEditor.ts       # CanvasEditorProvider — CustomTextEditorProvider for .excalidraw
 │   └── test/
-│       └── extension.test.ts # Mocha test suite
+│       ├── scanCache.test.ts # Mocha tests — cache invalidation semantics
+│       └── fileFilter.test.ts# Mocha tests — filename/filter matching
 ├── media/
 │   ├── preview.js            # Webview JS: renders markdown/mermaid, receives live updates
 │   ├── preview.css           # Webview CSS: typography, mermaid-container
@@ -57,10 +59,12 @@ npm run test       # Compile + lint + run tests via vscode-test
   - `docspace.newMarkdown` — creates a `.md` file in the target folder (right-click context menu on Docs categories and folders).
   - `docspace.newMermaid` — creates a `.mmd` file in the target folder (right-click on Diagrams categories and folders).
   - `docspace.newExcalidraw` — creates a `.excalidraw` file in the target folder (right-click on Canvas categories and folders).
+  - `docspace.deleteFile` / `docspace.renameFile` — file management from the tree (inline trash icon / context menu).
 - **Tree View:** panel "Docspace" in the Activity Bar (`docspace-sidebar` / `docspace.explorer`). Two modes:
   - `auto` — discovers `.md`, `.mmd` (and `.md` with Mermaid blocks), `.canvas`, and `.excalidraw` files across the entire workspace, organized under Docs / Diagrams / Canvas categories.
   - `folder` — uses `docspace.rootFolder` (default `.docspace/`) as the source; subfolders become categories. On activation, creates `docs/`, `diagrams/`, `canvas/` automatically. Category filterKey is inferred from folder name.
 - **Hierarchical navigation:** folders are shown as expandable nodes. Only folders with relevant content (recursively) are shown. Folders in `docspace.exclude` are ignored.
+- **Tree refresh & caching (`src/scanCache.ts`):** discovery results (directory relevance, mermaid-block checks) are cached. A `FileSystemWatcher` scoped to `**/*.{md,mmd,excalidraw}` invalidates only the affected path (plus its ancestors/descendants) via `provider.invalidate(uri)`; refreshes are debounced (300ms). Never wire broad listeners like `onDidSaveTextDocument` to a full refresh — that rescans the workspace on every save of any file. Config changes to `mode`/`rootFolder`/`exclude` call `provider.refreshAll()` (clears all caches).
 - **Context menus:** right-clicking a category or folder shows creation commands filtered by type (`contextValue` on `WorkspaceTreeItem` drives the `when` clause).
 - **Preview flow (`src/previewPanel.ts`):**
   1. `PreviewPanel.createOrShow()` calls `showTextDocument(uri, { viewColumn: One })`.

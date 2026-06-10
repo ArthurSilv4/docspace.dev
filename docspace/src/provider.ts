@@ -3,12 +3,39 @@ import { WorkspaceTreeItem } from './treeItem.js';
 import { getConfig, workspaceRoot } from './config.js';
 import { readDirChildren } from './dirReader.js';
 import { folderModeCategories } from './folderMode.js';
+import { clearCaches, invalidatePath } from './scanCache.js';
 
-export class DocspaceProvider implements vscode.TreeDataProvider<WorkspaceTreeItem> {
+const REFRESH_DEBOUNCE_MS = 300;
+
+export class DocspaceProvider implements vscode.TreeDataProvider<WorkspaceTreeItem>, vscode.Disposable {
 	private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
 	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+	private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
-	refresh(): void { this._onDidChangeTreeData.fire(); }
+	/** Invalidate cached scan results for a single path, then refresh (debounced). */
+	invalidate(uri: vscode.Uri): void {
+		invalidatePath(uri);
+		this.scheduleRefresh();
+	}
+
+	/** Drop all cached scan results, then refresh (debounced). */
+	refreshAll(): void {
+		clearCaches();
+		this.scheduleRefresh();
+	}
+
+	private scheduleRefresh(): void {
+		if (this.refreshTimer) { clearTimeout(this.refreshTimer); }
+		this.refreshTimer = setTimeout(() => {
+			this.refreshTimer = undefined;
+			this._onDidChangeTreeData.fire();
+		}, REFRESH_DEBOUNCE_MS);
+	}
+
+	dispose(): void {
+		if (this.refreshTimer) { clearTimeout(this.refreshTimer); }
+		this._onDidChangeTreeData.dispose();
+	}
 
 	getTreeItem(element: WorkspaceTreeItem): WorkspaceTreeItem { return element; }
 

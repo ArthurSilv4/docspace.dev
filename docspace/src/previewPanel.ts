@@ -75,9 +75,10 @@ export class PreviewPanel {
 	}
 
 	async render(): Promise<void> {
-		const text = Buffer.from(await vscode.workspace.fs.readFile(this.uri)).toString('utf8');
+		// openTextDocument returns the in-memory buffer, so unsaved edits show up
+		const document = await vscode.workspace.openTextDocument(this.uri);
 		const isMmd = this.uri.fsPath.endsWith('.mmd');
-		this.panel.webview.html = this.buildHtml(text, isMmd);
+		this.panel.webview.html = this.buildHtml(document.getText(), isMmd);
 	}
 
 	private buildHtml(source: string, isMmd: boolean): string {

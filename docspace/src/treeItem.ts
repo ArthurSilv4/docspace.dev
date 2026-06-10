@@ -7,12 +7,12 @@ function buildCommand(uri: vscode.Uri): vscode.Command {
 	const isPreviewable = /\.(md|mmd)$/.test(uri.fsPath);
 	const isCanvas = /\.excalidraw$/.test(uri.fsPath);
 	if (isPreviewable) {
-		return { command: 'docspace.openPreview', title: 'Visualizar', arguments: [uri] };
+		return { command: 'docspace.openPreview', title: 'Open Preview', arguments: [uri] };
 	}
 	if (isCanvas) {
-		return { command: 'vscode.openWith', title: 'Abrir no Canvas', arguments: [uri, 'docspace.canvasEditor'] };
+		return { command: 'vscode.openWith', title: 'Open in Canvas', arguments: [uri, 'docspace.canvasEditor'] };
 	}
-	return { command: 'vscode.open', title: 'Abrir', arguments: [uri] };
+	return { command: 'vscode.open', title: 'Open', arguments: [uri] };
 }
 
 export class WorkspaceTreeItem extends vscode.TreeItem {
