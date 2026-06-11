@@ -15,23 +15,51 @@ export interface ProjectGraph {
 	edges: GraphEdge[];
 }
 
-const CODE_FILE = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
 const MAX_FILES = 1500;
 const RESOLVE_SUFFIXES = ['', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '/index.ts', '/index.js'];
 
-const IMPORT_PATTERNS = [
-	/import\s+[\w*{},\s$]+?from\s*['"]([^'"]+)['"]/g, // import x from '...'
-	/import\s*['"]([^'"]+)['"]/g,                     // import '...' (side effect)
-	/export\s+[\w*{},\s$]+?from\s*['"]([^'"]+)['"]/g, // export { x } from '...'
-	/require\(\s*['"]([^'"]+)['"]\s*\)/g,             // require('...')
-	/import\(\s*['"]([^'"]+)['"]\s*\)/g,              // import('...') dynamic
+export const CODE_LANGUAGES = new Set([
+	'typescript', 'javascript', 'typescriptreact', 'javascriptreact',
+	'csharp', 'python', 'go', 'rust', 'java', 'cpp', 'c', 'ruby', 'php', 'swift', 'kotlin',
+]);
+
+/** Folders excluded from the graph walk in addition to docspace.exclude. */
+const EXTRA_EXCLUDE = ['bin', 'obj', '.vs', '__pycache__', '.venv', 'vendor'];
+
+const JS_PATTERNS: RegExp[] = [
+	/import\s+[\w*{},\s$]+?from\s*['"]([^'"]+)['"]/g,
+	/import\s*['"]([^'"]+)['"]/g,
+	/export\s+[\w*{},\s$]+?from\s*['"]([^'"]+)['"]/g,
+	/require\(\s*['"]([^'"]+)['"]\s*\)/g,
+	/import\(\s*['"]([^'"]+)['"]\s*\)/g,
 ];
 
-/** Extract unique import/require specifiers from JS/TS source. */
-export function extractImports(source: string): string[] {
+const LANG_PATTERNS: Record<string, RegExp[]> = {
+	typescript:      JS_PATTERNS,
+	javascript:      JS_PATTERNS,
+	typescriptreact: JS_PATTERNS,
+	javascriptreact: JS_PATTERNS,
+	csharp: [
+		/^\s*using\s+([\w.]+)\s*;/gm,
+		/ProjectReference\s+Include="([^"]+)"/g,
+	],
+	python: [
+		/^\s*import\s+([\w.]+)/gm,
+		/^\s*from\s+(\.+[\w.]*|[\w.]+)\s+import/gm,
+	],
+	go: [
+		/import\s+"([^"]+)"/g,
+		/^\t"([a-zA-Z0-9._/\-@]+)"/gm,
+	],
+};
+
+/** Extract unique import specifiers from source using language-appropriate patterns. */
+export function extractImports(source: string, languageId = 'typescript'): string[] {
+	const patterns = LANG_PATTERNS[languageId] ?? JS_PATTERNS;
 	const specs = new Set<string>();
-	for (const pattern of IMPORT_PATTERNS) {
-		const re = new RegExp(pattern.source, 'g');
+	for (const pattern of patterns) {
+		const flags = 'g' + (pattern.flags.includes('m') ? 'm' : '');
+		const re = new RegExp(pattern.source, flags);
 		let match;
 		while ((match = re.exec(source)) !== null) { specs.add(match[1]); }
 	}
@@ -60,33 +88,60 @@ export function packageName(spec: string): string {
 	return spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }
 
-function isWalkableDir(name: string, exclude: string[]): boolean {
-	return !exclude.includes(name) && !name.startsWith('.');
-}
+/** Fast extension → languageId map; avoids opening documents for common cases. */
+const EXT_LANG: Record<string, string> = {
+	'.ts': 'typescript',   '.tsx': 'typescriptreact',
+	'.js': 'javascript',   '.jsx': 'javascriptreact',
+	'.mjs': 'javascript',  '.cjs': 'javascript',
+	'.cs': 'csharp',
+	'.py': 'python',
+	'.go': 'go',
+	'.rs': 'rust',
+	'.java': 'java',
+	'.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp',
+	'.c': 'c', '.h': 'c',
+	'.rb': 'ruby',
+	'.php': 'php',
+	'.swift': 'swift',
+	'.kt': 'kotlin', '.kts': 'kotlin',
+};
 
-async function walkDir(dirUri: vscode.Uri, rel: string, exclude: string[], files: string[]): Promise<void> {
-	if (files.length >= MAX_FILES) { return; }
-	let entries: [string, vscode.FileType][];
+async function langIdFor(uri: vscode.Uri): Promise<string> {
+	const ext = path.extname(uri.fsPath).toLowerCase();
+	if (ext && EXT_LANG[ext]) { return EXT_LANG[ext]; }
 	try {
-		entries = await vscode.workspace.fs.readDirectory(dirUri);
-	} catch { /* unreadable directory */
-		return;
-	}
-	for (const [name, type] of entries) {
-		if (files.length >= MAX_FILES) { return; }
-		const childRel = rel ? `${rel}/${name}` : name;
-		if (type === vscode.FileType.Directory && isWalkableDir(name, exclude)) {
-			await walkDir(vscode.Uri.joinPath(dirUri, name), childRel, exclude, files);
-		} else if (type === vscode.FileType.File && CODE_FILE.test(name)) {
-			files.push(childRel);
-		}
+		const doc = await vscode.workspace.openTextDocument(uri);
+		return doc.languageId;
+	} catch {
+		return 'plaintext';
 	}
 }
 
-async function collectCodeFiles(rootUri: vscode.Uri, exclude: string[]): Promise<string[]> {
-	const files: string[] = [];
-	await walkDir(rootUri, '', exclude, files);
-	return files;
+async function collectCodeFiles(
+	rootUri: vscode.Uri,
+	exclude: string[],
+): Promise<Array<{ rel: string; langId: string }>> {
+	const allExclude = [...new Set([...exclude, ...EXTRA_EXCLUDE])];
+	const excludeParts = allExclude.map((e) => `**/${e}/**`).concat(['**/.*/**']);
+	const excludeGlob = `{${excludeParts.join(',')}}`;
+
+	const uris = await vscode.workspace.findFiles('**/*', excludeGlob, MAX_FILES + 1);
+
+	const rootFsPath = rootUri.fsPath;
+	const inRoot = uris
+		.filter((u) => u.fsPath.startsWith(rootFsPath + path.sep))
+		.slice(0, MAX_FILES);
+
+	const results = await Promise.all(
+		inRoot.map(async (uri) => {
+			const langId = await langIdFor(uri);
+			if (!CODE_LANGUAGES.has(langId)) { return null; }
+			const rel = uri.fsPath.slice(rootFsPath.length + 1).split(path.sep).join('/');
+			return { rel, langId };
+		})
+	);
+
+	return results.filter((r): r is { rel: string; langId: string } => r !== null);
 }
 
 function ensureFolderChain(rel: string, nodes: Map<string, GraphNode>): string {
@@ -137,7 +192,8 @@ function addEdgeForSpec(
  * edges to external packages.
  */
 export async function buildProjectGraph(rootUri: vscode.Uri, exclude: string[]): Promise<ProjectGraph> {
-	const files = await collectCodeFiles(rootUri, exclude);
+	const fileEntries = await collectCodeFiles(rootUri, exclude);
+	const files = fileEntries.map((e) => e.rel);
 	const fileSet = new Set(files);
 	const nodes = new Map<string, GraphNode>();
 	const edges: GraphEdge[] = [];
@@ -151,7 +207,7 @@ export async function buildProjectGraph(rootUri: vscode.Uri, exclude: string[]):
 		});
 	}
 
-	for (const file of files) {
+	for (const { rel: file, langId } of fileEntries) {
 		let text: string;
 		try {
 			const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(rootUri, file));
@@ -159,7 +215,7 @@ export async function buildProjectGraph(rootUri: vscode.Uri, exclude: string[]):
 		} catch { /* unreadable file */
 			continue;
 		}
-		for (const spec of extractImports(text)) {
+		for (const spec of extractImports(text, langId)) {
 			addEdgeForSpec(file, spec, fileSet, nodes, edges, edgeIds);
 		}
 	}
