@@ -106,15 +106,9 @@ const EXT_LANG: Record<string, string> = {
 	'.kt': 'kotlin', '.kts': 'kotlin',
 };
 
-async function langIdFor(uri: vscode.Uri): Promise<string> {
+function langIdFor(uri: vscode.Uri): string {
 	const ext = path.extname(uri.fsPath).toLowerCase();
-	if (ext && EXT_LANG[ext]) { return EXT_LANG[ext]; }
-	try {
-		const doc = await vscode.workspace.openTextDocument(uri);
-		return doc.languageId;
-	} catch {
-		return 'plaintext';
-	}
+	return EXT_LANG[ext] ?? 'plaintext';
 }
 
 async function collectCodeFiles(
@@ -123,25 +117,20 @@ async function collectCodeFiles(
 ): Promise<Array<{ rel: string; langId: string }>> {
 	const allExclude = [...new Set([...exclude, ...EXTRA_EXCLUDE])];
 	const excludeParts = allExclude.map((e) => `**/${e}/**`).concat(['**/.*/**']);
-	const excludeGlob = `{${excludeParts.join(',')}}`;
+	const excludeGlob = excludeParts.length > 0 ? `{${excludeParts.join(',')}}` : undefined;
 
-	const uris = await vscode.workspace.findFiles('**/*', excludeGlob, MAX_FILES + 1);
+	const pattern = new vscode.RelativePattern(rootUri, '**/*');
+	const uris = await vscode.workspace.findFiles(pattern, excludeGlob, MAX_FILES);
 
 	const rootFsPath = rootUri.fsPath;
-	const inRoot = uris
-		.filter((u) => u.fsPath.startsWith(rootFsPath + path.sep))
-		.slice(0, MAX_FILES);
-
-	const results = await Promise.all(
-		inRoot.map(async (uri) => {
-			const langId = await langIdFor(uri);
+	return uris
+		.map((uri) => {
+			const langId = langIdFor(uri);
 			if (!CODE_LANGUAGES.has(langId)) { return null; }
 			const rel = uri.fsPath.slice(rootFsPath.length + 1).split(path.sep).join('/');
 			return { rel, langId };
 		})
-	);
-
-	return results.filter((r): r is { rel: string; langId: string } => r !== null);
+		.filter((r): r is { rel: string; langId: string } => r !== null);
 }
 
 function ensureFolderChain(rel: string, nodes: Map<string, GraphNode>): string {
@@ -174,6 +163,9 @@ function addEdgeForSpec(
 		}
 		return;
 	}
+	// Namespace-style specs (e.g. C# `System.IO`, Python `os.path`) have no `/`
+	// and contain an internal `.` — they are not meaningful as module nodes.
+	if (!spec.includes('/') && /\./.test(spec)) { return; }
 	const pkg = packageName(spec);
 	const moduleId = `module:${pkg}`;
 	if (!nodes.has(moduleId)) {

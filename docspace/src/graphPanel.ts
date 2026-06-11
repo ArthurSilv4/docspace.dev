@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { getConfig, workspaceRoot } from './config.js';
+import { getConfig, resolveRootUri, workspaceRoot } from './config.js';
 import { buildProjectGraph } from './projectGraph.js';
 
 const CYTOSCAPE_VERSION = '3.34.0';
@@ -65,7 +65,7 @@ export class GraphPanel {
 	}
 
 	private async sendGraph(): Promise<void> {
-		const root = workspaceRoot();
+		const root = resolveRootUri() ?? workspaceRoot();
 		if (!root) {
 			await this.panel.webview.postMessage({ type: 'error', message: 'No workspace open.' });
 			return;
