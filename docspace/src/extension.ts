@@ -210,24 +210,37 @@ function configTarget(): vscode.ConfigurationTarget {
 	return workspaceRoot() ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
 }
 
+const DEFAULT_ROOT_FOLDER = '.docspace';
+
+/** Human-readable name of the active mode, distinguishing the 3 the UI offers. */
+function currentModeLabel(): string {
+	const { mode, rootFolder } = getConfig();
+	if (mode === 'auto') { return 'Automático'; }
+	if (rootFolder === DEFAULT_ROOT_FOLDER) { return 'Pasta .docspace'; }
+	return `Pasta escolhida (${rootFolder})`;
+}
+
 async function selectMode(): Promise<void> {
-	const current = getConfig().mode;
 	const picked = await vscode.window.showQuickPick(
 		[
-			{ label: '$(search) Auto', description: 'Descobre .md, .mmd e Mermaid em todo o workspace', value: 'auto' },
-			{ label: '$(folder) Folder', description: 'Usa a pasta .docspace (ou docspace.rootFolder) como fonte', value: 'folder' },
+			{ label: '$(search) Automático', description: 'Detecta Markdown, Mermaid e canvas em todo o projeto', value: 'auto' },
+			{ label: '$(folder) Pasta .docspace', description: 'Cria e usa a pasta .docspace na raiz do projeto', value: 'folder' },
 			{ label: '$(folder-opened) Escolher pasta…', description: 'Aponta o Docspace para qualquer pasta do computador', value: 'pick' },
 		],
-		{ title: 'Docspace — modo de descoberta', placeHolder: `Atual: ${current}` }
+		{ title: 'Docspace — modo de descoberta', placeHolder: `Atual: ${currentModeLabel()}` }
 	);
 	if (!picked) { return; }
-	if (picked.value === 'pick') {
-		await selectRootFolder();
-		return;
-	}
-	await vscode.workspace.getConfiguration('docspace').update('mode', picked.value, configTarget());
-	if (picked.value === 'folder') {
+
+	const cfg = vscode.workspace.getConfiguration('docspace');
+	if (picked.value === 'auto') {
+		await cfg.update('mode', 'auto', configTarget());
+	} else if (picked.value === 'folder') {
+		// Reset to the .docspace convention even if a custom folder was set before
+		await cfg.update('rootFolder', DEFAULT_ROOT_FOLDER, configTarget());
+		await cfg.update('mode', 'folder', configTarget());
 		await scaffoldFolderStructure();
+	} else {
+		await selectRootFolder();
 	}
 }
 
