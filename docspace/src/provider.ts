@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { WorkspaceTreeItem } from './treeItem.js';
 import { getConfig, workspaceRoot } from './config.js';
 import { readDirChildren } from './dirReader.js';
-import { folderModeCategories } from './folderMode.js';
+import { folderModeChildren } from './folderMode.js';
 import { clearCaches, invalidatePath } from './scanCache.js';
 
 const REFRESH_DEBOUNCE_MS = 300;
@@ -40,11 +40,11 @@ export class DocspaceProvider implements vscode.TreeDataProvider<WorkspaceTreeIt
 	getTreeItem(element: WorkspaceTreeItem): WorkspaceTreeItem { return element; }
 
 	async getChildren(element?: WorkspaceTreeItem): Promise<WorkspaceTreeItem[]> {
-		const { mode, rootFolder, exclude } = getConfig();
+		const { mode, exclude } = getConfig();
 
 		if (!element) {
 			return mode === 'folder'
-				? folderModeCategories(rootFolder)
+				? folderModeChildren(exclude)
 				: [
 					new WorkspaceTreeItem('category', 'Docs',     undefined, 'docs',     'book'),
 					new WorkspaceTreeItem('category', 'Diagrams', undefined, 'diagrams', 'graph'),

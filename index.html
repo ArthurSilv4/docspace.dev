@@ -143,7 +143,9 @@
 
     /* ── VS CODE MOCKUP ── */
     .vscode-window {
-      height: 580px; display: flex; flex-direction: column;
+      /* tall enough that the embedded Excalidraw canvas (~550px) stays above
+         its 500px mobile-layout breakpoint and renders the desktop UI */
+      height: 640px; display: flex; flex-direction: column;
       border-radius: var(--radius-lg); overflow: hidden;
       border: 1px solid var(--vs-edge);
       box-shadow: 0 32px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.03);
@@ -159,7 +161,10 @@
     .vs-dot.r { background: #ff5f57; }
     .vs-dot.y { background: #febc2e; }
     .vs-dot.g { background: #28c840; }
-    .vs-wintitle { flex: 1; text-align: center; font-size: 0.7rem; color: #555; font-family: var(--font); }
+    .vs-wintitle {
+      flex: 1; min-width: 0; text-align: center; font-size: 0.7rem; color: #555; font-family: var(--font);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
 
     /* Body: actbar + sidebar + editor */
     .vs-body { display: flex; flex: 1; overflow: hidden; }
@@ -258,8 +263,16 @@
     .vs-mmd-out svg { max-width: 100%; max-height: 360px; }
 
     /* Canvas full-width */
-    .vs-canvas { flex: 1; position: relative; background: #1e1e2e; overflow: hidden; }
-    #excalidraw-root { position: absolute; inset: 0; background: #1e1e2e; }
+    .vs-canvas { flex: 1; position: relative; background: var(--vs-bg); overflow: hidden; }
+    #excalidraw-root { position: absolute; inset: 0; }
+
+    /* Hide Excalidraw chrome that adds noise to the demo (display-only,
+       scoped to the mockup; missing selectors are harmless) */
+    .vs-canvas .excalidraw .HintViewer,
+    .vs-canvas .excalidraw .help-icon,
+    .vs-canvas .excalidraw .layer-ui__wrapper__top-right,
+    .vs-canvas .excalidraw .App-bottom-bar,
+    .vs-canvas .excalidraw .dropdown-menu-button { display: none !important; }
 
     /* Loading spinner (overlays excalidraw-root) */
     .vs-spinner-wrap {
@@ -267,14 +280,16 @@
       align-items: center; justify-content: center; gap: 1rem;
       color: #555; font-size: 0.82rem; font-family: var(--font); z-index: 5;
     }
-    .vs-spinner { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #2a2a3e; border-top-color: #6b6b8a; animation: spin 0.8s linear infinite; }
+    .vs-spinner { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #242424; border-top-color: #888; animation: spin 0.8s linear infinite; }
 
     /* Status bar */
     .vs-statusbar {
       height: 22px; background: var(--vs-panel); border-top: 1px solid var(--vs-edge);
       display: flex; align-items: center; padding: 0 0.75rem; gap: 1.5rem;
       font-size: 0.66rem; color: #444; flex-shrink: 0; font-family: var(--mono);
+      white-space: nowrap; overflow: hidden;
     }
+    .vs-statusbar span { flex-shrink: 0; }
     .vs-status-ok { color: #4a9a6a; }
 
     /* ── FEATURES ── */
@@ -346,7 +361,9 @@
       .vs-body { height: 460px; }
       .vs-editpane { height: 170px; }
       .vs-prevpane { height: 170px; }
-      .vs-canvas { height: 320px; }
+      .vs-canvas { height: 340px; }
+      .vs-statusbar { gap: 0.9rem; }
+      .vs-statusbar span:nth-of-type(3), .vs-statusbar span:nth-of-type(4) { display: none; }
     }
     @media (max-width: 500px) {
       nav { padding: 0 1.25rem; }
@@ -620,6 +637,8 @@
     };
 
     let mmdTimer, mmdId = 0;
+    let excalidrawModules = null; // memoized Promise<{ React, createRoot, Excalidraw }>
+    let excalidrawCleanup = null; // tears down the current canvas mount
 
     function syncGutter(ta, g) {
       const n = ta.value.split('\n').length;
@@ -682,6 +701,9 @@
       const scene = SCENES[key];
       if (!scene) { return; }
 
+      // Tear down a mounted Excalidraw before replacing the content area
+      if (excalidrawCleanup) { excalidrawCleanup(); }
+
       document.querySelectorAll('.vs-tree-file').forEach(f => f.classList.toggle('active', f.dataset.scene === key));
       document.getElementById('vs-wintitle').textContent = `${scene.label} — Docspace — Visual Studio Code`;
       document.getElementById('vs-etab-name').textContent = `${scene.icon} ${scene.label}`;
@@ -722,67 +744,99 @@
 
     switchScene('md');
 
-    // ── Excalidraw lazy load ───────────────────────────────
-    function loadScript(src) {
-      return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = src; s.onload = resolve; s.onerror = reject;
-        document.head.appendChild(s);
-      });
+    // ── Excalidraw (pinned ESM build — official 0.18+ pattern) ──
+    // Since 0.18 there is no UMD bundle and the stylesheet ships separately:
+    // load the ESM build from esm.sh and link dist/prod/index.css explicitly.
+    const EXC_VERSION = '0.18.1';
+    const REACT_VERSION = '19.1.0';
+
+    function ensureExcalidrawModules() {
+      if (!excalidrawModules) {
+        window.EXCALIDRAW_ASSET_PATH = `https://esm.sh/@excalidraw/excalidraw@${EXC_VERSION}/dist/prod/`;
+        const css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = `https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@${EXC_VERSION}/dist/prod/index.css`;
+        document.head.appendChild(css);
+        excalidrawModules = Promise.all([
+          import(`https://esm.sh/react@${REACT_VERSION}`),
+          import(`https://esm.sh/react-dom@${REACT_VERSION}/client`),
+          import(`https://esm.sh/@excalidraw/excalidraw@${EXC_VERSION}?deps=react@${REACT_VERSION},react-dom@${REACT_VERSION}`),
+        ]).then(([reactMod, reactDomClient, excalidrawMod]) => ({
+          React: reactMod.default ?? reactMod,
+          createRoot: reactDomClient.createRoot,
+          Excalidraw: excalidrawMod.Excalidraw,
+        }));
+      }
+      return excalidrawModules;
+    }
+
+    // Excalidraw's dark theme renders via a color-inversion filter, so element
+    // colors are declared as LIGHT-theme values: on screen these display as a
+    // near-black canvas, dark gray boxes, and light text.
+    const EXC_STROKE = '#7a7a7a', EXC_FILL = '#f0f0f0', EXC_TEXT = '#1d1d1d', EXC_ARROW = '#888888';
+
+    function demoElements() {
+      let nonce = 0;
+      const base = () => ({ version: 1, versionNonce: ++nonce, isDeleted: false, groupIds: [], updated: 1, link: null, locked: false, opacity: 100, roughness: 1 });
+      // box() emits a rectangle plus a bound text label — Excalidraw centers
+      // the label inside the container on load.
+      const box = (id, x, y, w, h, text, fillStyle = 'solid') => [
+        { ...base(), type: 'rectangle', id, x, y, width: w, height: h, strokeColor: EXC_STROKE, backgroundColor: EXC_FILL, fillStyle, strokeWidth: 2, roundness: { type: 3 }, boundElements: [{ id: `${id}-label`, type: 'text' }] },
+        { ...base(), type: 'text', id: `${id}-label`, x: x + 12, y: y + h / 2 - 13, width: w - 24, height: 25, text, originalText: text, fontSize: 20, fontFamily: 1, textAlign: 'center', verticalAlign: 'middle', strokeColor: EXC_TEXT, backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1, roughness: 0, baseline: 18, lineHeight: 1.25, containerId: id, boundElements: [] },
+      ];
+      const arrow = (id, x, y, points, dashed = false) => ({ ...base(), type: 'arrow', id, x, y, points, strokeColor: EXC_ARROW, backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 2, strokeStyle: dashed ? 'dashed' : 'solid', boundElements: [], startBinding: null, endBinding: null, startArrowhead: null, endArrowhead: 'arrow' });
+      return [
+        ...box('client', 60, 90, 190, 70, 'Client'),
+        ...box('api', 410, 90, 210, 70, 'API Gateway'),
+        ...box('db', 770, 90, 190, 70, 'Database', 'hachure'),
+        ...box('auth', 410, 280, 210, 70, 'Auth service'),
+        arrow('a1', 265, 125, [[0, 0], [130, 0]]),
+        arrow('a2', 635, 125, [[0, 0], [120, 0]]),
+        arrow('a3', 515, 175, [[0, 0], [0, 90]]),
+        arrow('a4', 635, 315, [[0, 0], [200, -135]], true),
+      ];
     }
 
     async function loadExcalidraw() {
       if (!document.getElementById('excalidraw-root')) { return; }
       try {
-        if (!window.ExcalidrawLib) {
-          window.EXCALIDRAW_ASSET_PATH = 'https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw/dist/';
-          await loadScript('https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js');
-          await loadScript('https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js');
-          await loadScript('https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw/dist/excalidraw.production.min.js');
-        }
-        const { Excalidraw } = window.ExcalidrawLib;
+        const { React, createRoot, Excalidraw } = await ensureExcalidrawModules();
         const rEl = document.getElementById('excalidraw-root');
-        if (!rEl) { return; }
+        if (!rEl) { return; } // user switched scenes while modules loaded
 
-        const initialData = {
-          elements: [
-            { type: 'rectangle', id: 'r1', x: 60,  y: 120, width: 140, height: 56, strokeColor: '#6b6b8a', backgroundColor: '#2a2a3e', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, roundness: { type: 3 }, version: 1, versionNonce: 1,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false },
-            { type: 'rectangle', id: 'r2', x: 300, y: 120, width: 160, height: 56, strokeColor: '#6b6b8a', backgroundColor: '#2a2a3e', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, roundness: { type: 3 }, version: 1, versionNonce: 2,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false },
-            { type: 'rectangle', id: 'r3', x: 560, y: 120, width: 140, height: 56, strokeColor: '#6b6b8a', backgroundColor: '#2a2a3e', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, roundness: { type: 3 }, version: 1, versionNonce: 3,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false },
-            { type: 'rectangle', id: 'r4', x: 300, y: 240, width: 160, height: 56, strokeColor: '#6b6b8a', backgroundColor: '#2a2a3e', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, roundness: { type: 3 }, version: 1, versionNonce: 9,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false },
-            { type: 'text', id: 't1', x: 75,  y: 141, text: '🌐 Client',     fontSize: 15, fontFamily: 1, textAlign: 'left', verticalAlign: 'top', strokeColor: '#c8c8e0', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1, roughness: 0, opacity: 100, version: 1, versionNonce: 4,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, containerId: null },
-            { type: 'text', id: 't2', x: 320, y: 141, text: '⚡ API Server', fontSize: 15, fontFamily: 1, textAlign: 'left', verticalAlign: 'top', strokeColor: '#c8c8e0', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1, roughness: 0, opacity: 100, version: 1, versionNonce: 5,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, containerId: null },
-            { type: 'text', id: 't3', x: 578, y: 141, text: '🗄 Database',   fontSize: 15, fontFamily: 1, textAlign: 'left', verticalAlign: 'top', strokeColor: '#c8c8e0', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1, roughness: 0, opacity: 100, version: 1, versionNonce: 6,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, containerId: null },
-            { type: 'text', id: 't4', x: 326, y: 261, text: '🔒 Auth',       fontSize: 15, fontFamily: 1, textAlign: 'left', verticalAlign: 'top', strokeColor: '#c8c8e0', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1, roughness: 0, opacity: 100, version: 1, versionNonce: 10, isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, containerId: null },
-            { type: 'arrow', id: 'a1', x: 200, y: 148, points: [[0,0],[100,0]], strokeColor: '#4a4a6a', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, version: 1, versionNonce: 7,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, startBinding: null, endBinding: null },
-            { type: 'arrow', id: 'a2', x: 460, y: 148, points: [[0,0],[100,0]], strokeColor: '#4a4a6a', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, version: 1, versionNonce: 8,  isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, startBinding: null, endBinding: null },
-            { type: 'arrow', id: 'a3', x: 380, y: 176, points: [[0,0],[0,64]],  strokeColor: '#4a4a6a', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1.5, roughness: 1, opacity: 100, version: 1, versionNonce: 11, isDeleted: false, groupIds: [], boundElements: [], updated: 1, link: null, locked: false, startBinding: null, endBinding: null },
-          ],
-          appState: { gridSize: 20, theme: 'dark', viewBackgroundColor: '#1e1e2e' },
-          scrollToContent: true,
+        let api = null;
+        let nudgeTimer = null;
+        const fit = () => {
+          if (!api) { return; }
+          // fills the canvas while staying clear of the floating toolbar
+          api.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.85 });
+          // scrollToContent applies async — nudge the centered content down,
+          // below the toolbar overlay, only after the fit has settled
+          clearTimeout(nudgeTimer);
+          nudgeTimer = setTimeout(() => {
+            if (!api) { return; }
+            const st = api.getAppState();
+            api.updateScene({ appState: { scrollY: st.scrollY + 24 / st.zoom.value } });
+          }, 100);
         };
+        // Re-fit whenever the mockup resizes (responsive breakpoints)
+        const resizeObs = new ResizeObserver(() => fit());
+        resizeObs.observe(rEl);
 
-        const domRoot = ReactDOM.createRoot(rEl);
-        domRoot.render(React.createElement(Excalidraw, {
-          initialData,
+        const root = createRoot(rEl);
+        root.render(React.createElement(Excalidraw, {
+          initialData: {
+            elements: demoElements(),
+            // default white background inverts to Excalidraw's standard near-black
+            appState: { gridSize: 20, theme: 'dark' },
+          },
           theme: 'dark',
-          excalidrawAPI: (api) => {
-            // Delay ensures updateScene runs after Excalidraw's internal re-renders
-            setTimeout(() => {
-              api.updateScene({ appState: { theme: 'dark', viewBackgroundColor: '#1e1e2e' } });
-            }, 50);
-            // Inject overrides AFTER Excalidraw mounts its own styles, so ours win
-            const prev = document.getElementById('exc-overrides');
-            if (prev) { prev.remove(); }
-            const s = document.createElement('style');
-            s.id = 'exc-overrides';
-            s.textContent = [
-              '.excalidraw .App-bottom-bar { display: none !important; }',
-              '.excalidraw .layer-ui__wrapper__top-right { display: none !important; }',
-              '.excalidraw { --editor-container-padding: 0px !important; }',
-              '.excalidraw .FixedSideContainer_side_top { top: 0 !important; left: 0 !important; right: 0 !important; }',
-            ].join('\n');
-            document.head.appendChild(s);
+          excalidrawAPI: (a) => {
+            api = a;
+            const lEl = document.getElementById('vs-canvas-loading');
+            if (lEl) { lEl.style.display = 'none'; }
+            // defer so the fit lands after Excalidraw's initial scene commit
+            setTimeout(fit, 50);
           },
           UIOptions: {
             canvasActions: {
@@ -799,13 +853,16 @@
           },
         }));
 
-        setTimeout(() => {
-          const lEl = document.getElementById('vs-canvas-loading');
-          if (lEl) { lEl.style.display = 'none'; }
-        }, 800);
+        excalidrawCleanup = () => {
+          excalidrawCleanup = null;
+          clearTimeout(nudgeTimer);
+          api = null;
+          resizeObs.disconnect();
+          root.unmount();
+        };
       } catch (err) {
         const lEl = document.getElementById('vs-canvas-loading');
-        if (lEl) { lEl.innerHTML = '<span style="color:#6b6b8a;font-size:.8rem">Failed to load canvas. Check your connection.</span>'; }
+        if (lEl) { lEl.innerHTML = '<span style="color:#888;font-size:.8rem">Failed to load canvas. Check your connection.</span>'; }
       }
     }
 

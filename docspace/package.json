@@ -31,6 +31,11 @@
         "icon": "$(gear)"
       },
       {
+        "command": "docspace.selectRootFolder",
+        "title": "Choose Docs Folder",
+        "icon": "$(folder-opened)"
+      },
+      {
         "command": "docspace.newMarkdown",
         "title": "New Markdown File",
         "icon": "$(new-file)"
@@ -116,14 +121,19 @@
       ],
       "view/title": [
         {
+          "command": "docspace.selectRootFolder",
+          "when": "view == docspace.explorer",
+          "group": "navigation@1"
+        },
+        {
           "command": "docspace.selectDiagramTheme",
           "when": "view == docspace.explorer",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "docspace.selectMode",
           "when": "view == docspace.explorer",
-          "group": "navigation"
+          "group": "navigation@3"
         }
       ]
     },
@@ -146,7 +156,7 @@
         "docspace.rootFolder": {
           "type": "string",
           "default": ".docspace",
-          "description": "Pasta raiz usada no modo 'folder'. Pode ser um caminho relativo à raiz do workspace."
+          "description": "Pasta raiz usada no modo 'folder'. Aceita um caminho relativo à raiz do workspace ou um caminho absoluto para qualquer pasta do computador."
         },
         "docspace.diagramTheme": {
           "type": "string",
@@ -208,7 +218,13 @@
           "name": "Docspace"
         }
       ]
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "docspace.explorer",
+        "contents": "Nenhum documento encontrado nesta pasta.\n[Escolher pasta](command:docspace.selectRootFolder)\n[Novo Markdown](command:docspace.newMarkdown)"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

@@ -3,7 +3,7 @@ import { FilterKey, WorkspaceTreeItem } from './treeItem.js';
 import { hasMermaidBlock, isFileRelevant, isRelevantByName, needsContentCheck } from './fileFilter.js';
 import { getCachedRelevance, setCachedRelevance } from './scanCache.js';
 
-async function safeReadDirectory(dirUri: vscode.Uri): Promise<[string, vscode.FileType][]> {
+export async function safeReadDirectory(dirUri: vscode.Uri): Promise<[string, vscode.FileType][]> {
 	try {
 		return await vscode.workspace.fs.readDirectory(dirUri);
 	} catch { /* directory unreadable or inaccessible */

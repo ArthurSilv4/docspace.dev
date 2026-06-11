@@ -8,12 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 docspace/
 ├── src/
 │   ├── extension.ts          # Entry point — activate() registers commands, providers, watcher
-│   ├── config.ts             # getConfig(), workspaceRoot()
+│   ├── config.ts             # getConfig(), workspaceRoot(), resolveRootUri()
 │   ├── treeItem.ts           # WorkspaceTreeItem, ItemKind, FilterKey
 │   ├── fileFilter.ts         # isRelevantByName(), needsContentCheck(), isFileRelevant(), hasMermaidBlock()
 │   ├── dirReader.ts          # readDirChildren(), hasRelevantContent()
 │   ├── scanCache.ts          # discovery caches + per-path invalidation (invalidatePath, clearCaches)
-│   ├── folderMode.ts         # folderModeCategories(), scaffoldFolderStructure()
+│   ├── folderMode.ts         # folderModeChildren(), scaffoldFolderStructure()
 │   ├── provider.ts           # DocspaceProvider (TreeDataProvider) — debounced refresh
 │   ├── previewPanel.ts       # PreviewPanel — native editor + webview preview
 │   ├── canvasEditor.ts       # CanvasEditorProvider — CustomTextEditorProvider for .excalidraw
@@ -54,7 +54,8 @@ npm run test       # Compile + lint + run tests via vscode-test
 - **Entry point:** `src/extension.ts` — registers all commands and providers. All resources are pushed to `context.subscriptions`.
 - **Commands:**
   - `docspace.openPreview` — opens the file in VS Code's native text editor (left column) and a live preview webview (right column).
-  - `docspace.selectMode` — QuickPick to switch between `auto` and `folder` modes (gear icon in panel header).
+  - `docspace.selectMode` — QuickPick to switch between `auto` and `folder` modes (gear icon in panel header); also offers "Escolher pasta…" which delegates to `selectRootFolder`.
+  - `docspace.selectRootFolder` — folder dialog that points the tree at any folder on disk (folder-opened icon in panel header). Paths inside the workspace are stored relative in `docspace.rootFolder`; external folders are stored absolute and watched via an extra `RelativePattern` watcher (`ExternalRootWatcher`).
   - `docspace.selectDiagramTheme` — QuickPick to change the Mermaid diagram theme (color icon in panel header).
   - `docspace.newMarkdown` — creates a `.md` file in the target folder (right-click context menu on Docs categories and folders).
   - `docspace.newMermaid` — creates a `.mmd` file in the target folder (right-click on Diagrams categories and folders).
@@ -62,7 +63,7 @@ npm run test       # Compile + lint + run tests via vscode-test
   - `docspace.deleteFile` / `docspace.renameFile` — file management from the tree (inline trash icon / context menu).
 - **Tree View:** panel "Docspace" in the Activity Bar (`docspace-sidebar` / `docspace.explorer`). Two modes:
   - `auto` — discovers `.md`, `.mmd` (and `.md` with Mermaid blocks), `.canvas`, and `.excalidraw` files across the entire workspace, organized under Docs / Diagrams / Canvas categories.
-  - `folder` — uses `docspace.rootFolder` (default `.docspace/`) as the source; subfolders become categories. On activation, creates `docs/`, `diagrams/`, `canvas/` automatically. Category filterKey is inferred from folder name.
+  - `folder` — uses `docspace.rootFolder` (default `.docspace/`, relative or absolute) as the source; subfolders become categories (scaffold names `docs`/`diagrams`/`canvas` always show; other folders only when they contain relevant content) and relevant files at the folder root are listed directly. Switching to folder mode scaffolds `docs/`, `diagrams/`, `canvas/` only when the root folder doesn't exist yet — existing folders are never modified. Category filterKey is inferred from folder name.
 - **Hierarchical navigation:** folders are shown as expandable nodes. Only folders with relevant content (recursively) are shown. Folders in `docspace.exclude` are ignored.
 - **Tree refresh & caching (`src/scanCache.ts`):** discovery results (directory relevance, mermaid-block checks) are cached. A `FileSystemWatcher` scoped to `**/*.{md,mmd,excalidraw}` invalidates only the affected path (plus its ancestors/descendants) via `provider.invalidate(uri)`; refreshes are debounced (300ms). Never wire broad listeners like `onDidSaveTextDocument` to a full refresh — that rescans the workspace on every save of any file. Config changes to `mode`/`rootFolder`/`exclude` call `provider.refreshAll()` (clears all caches).
 - **Context menus:** right-clicking a category or folder shows creation commands filtered by type (`contextValue` on `WorkspaceTreeItem` drives the `when` clause).
@@ -82,7 +83,7 @@ npm run test       # Compile + lint + run tests via vscode-test
   - `media/canvas.js`: Excalidraw UMD (CDN) via `window.ExcalidrawLib`. No bundling required.
 - **Settings** (`package.json → contributes.configuration`):
   - `docspace.mode` — `"auto"` | `"folder"` (default: `"auto"`)
-  - `docspace.rootFolder` — relative path to workspace root (default: `".docspace"`)
+  - `docspace.rootFolder` — path relative to the workspace root, or an absolute path to any folder on disk (default: `".docspace"`)
   - `docspace.exclude` — folders to ignore (default: `["node_modules", ".git", "out", "dist"]`)
   - `docspace.diagramTheme` — Mermaid theme: `"auto"` | `"default"` | `"dark"` | `"forest"` | `"neutral"` | `"base"` (default: `"auto"`)
 - **Tests** use Mocha + `@vscode/test-cli`. Test files must match `**/*.test.ts` (compiled to `**/*.test.js` in `out/`) to be discovered.
