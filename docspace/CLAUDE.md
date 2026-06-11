@@ -16,15 +16,20 @@ docspace/
 │   ├── folderMode.ts         # folderModeChildren(), scaffoldFolderStructure()
 │   ├── provider.ts           # DocspaceProvider (TreeDataProvider) — debounced refresh
 │   ├── previewPanel.ts       # PreviewPanel — native editor + webview preview
+│   ├── graphPanel.ts         # GraphPanel — project graph webview (Cytoscape.js)
+│   ├── projectGraph.ts       # buildProjectGraph(), extractImports(), resolveImport()
 │   ├── canvasEditor.ts       # CanvasEditorProvider — CustomTextEditorProvider for .excalidraw
 │   └── test/
 │       ├── scanCache.test.ts # Mocha tests — cache invalidation semantics
-│       └── fileFilter.test.ts# Mocha tests — filename/filter matching
+│       ├── fileFilter.test.ts# Mocha tests — filename/filter matching
+│       └── projectGraph.test.ts # Mocha tests — import extraction/resolution
 ├── media/
 │   ├── preview.js            # Webview JS: renders markdown/mermaid, receives live updates
 │   ├── preview.css           # Webview CSS: typography, mermaid-container
 │   ├── canvas.js             # Webview JS: initializes Excalidraw, bidirectional sync
-│   └── canvas.css            # Webview CSS: full-screen Excalidraw container
+│   ├── canvas.css            # Webview CSS: full-screen Excalidraw container
+│   ├── graph.js              # Webview JS: Cytoscape render, search/filter, open-on-click
+│   └── graph.css             # Webview CSS: VS Code-themed toolbar + canvas
 ├── resources/
 │   └── icon.svg              # Activity Bar icon
 ├── out/                      # Compiled JS output (gitignored)
@@ -61,6 +66,12 @@ npm run test       # Compile + lint + run tests via vscode-test
   - `docspace.newMermaid` — creates a `.mmd` file in the target folder (right-click on Diagrams categories and folders).
   - `docspace.newExcalidraw` — creates a `.excalidraw` file in the target folder (right-click on Canvas categories and folders).
   - `docspace.deleteFile` / `docspace.renameFile` — file management from the tree (inline trash icon / context menu).
+  - `docspace.openProjectGraph` — opens the Project Graph webview (type-hierarchy icon in panel header).
+- **Project graph flow (`src/graphPanel.ts` + `src/projectGraph.ts`):**
+  1. `buildProjectGraph()` walks the workspace (honours `docspace.exclude`, skips dot-folders, caps at 1500 files), regex-extracts imports from JS/TS files, and resolves relative specifiers (incl. Node16 `./x.js` → `x.ts`).
+  2. Nodes are `file`/`folder`/`module` (folders are Cytoscape compound parents; bare imports become `module` nodes); edges are `imports` (file→file) or `dependsOn` (file→package).
+  3. The webview (`media/graph.js`) renders Obsidian-style with Cytoscape.js + fcose (pinned CDN versions; fcose needs the `layout-base`/`cose-base` globals loaded first): colored dots per top-level folder, node size by degree, labels hidden when zoomed out (`min-zoomed-font-size`), hover spotlights the neighborhood and dims the rest. Folder nodes from the data are NOT rendered (no compound boxes) — they only feed the folder filter. Search highlights + Enter zooms, Refresh rebuilds via `postMessage`, tapping a file node asks the extension to open it.
+  4. Toolbar layout toggle: **Network** (fcose force layout, arrowless haystack edges) vs **Flow** (dagre layered top→down, importer above imported; edges gain a `flow` class with bezier curves + arrows). dagre is also pinned on the CDN and needs the `dagre` global loaded before `cytoscape-dagre`; if it fails to load, Flow falls back to the built-in `breadthfirst` layout.
 - **Tree View:** panel "Docspace" in the Activity Bar (`docspace-sidebar` / `docspace.explorer`). Two modes:
   - `auto` — discovers `.md`, `.mmd` (and `.md` with Mermaid blocks), `.canvas`, and `.excalidraw` files across the entire workspace, organized under Docs / Diagrams / Canvas categories.
   - `folder` — uses `docspace.rootFolder` (default `.docspace/`, relative or absolute) as the source; subfolders become categories (scaffold names `docs`/`diagrams`/`canvas` always show; other folders only when they contain relevant content) and relevant files at the folder root are listed directly. Switching to folder mode scaffolds `docs/`, `diagrams/`, `canvas/` only when the root folder doesn't exist yet — existing folders are never modified. Category filterKey is inferred from folder name.

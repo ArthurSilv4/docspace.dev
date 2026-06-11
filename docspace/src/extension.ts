@@ -4,6 +4,7 @@ import { DocspaceProvider } from './provider.js';
 import { getConfig, resolveRootUri, workspaceRoot } from './config.js';
 import { scaffoldFolderStructure } from './folderMode.js';
 import { PreviewPanel } from './previewPanel.js';
+import { GraphPanel } from './graphPanel.js';
 import { CanvasEditorProvider } from './canvasEditor.js';
 import { WorkspaceTreeItem } from './treeItem.js';
 
@@ -132,6 +133,9 @@ function registerCommands(context: vscode.ExtensionContext, provider: DocspacePr
 	context.subscriptions.push(
 		vscode.commands.registerCommand('docspace.openPreview', (uri: vscode.Uri) => {
 			PreviewPanel.createOrShow(context, uri);
+		}),
+		vscode.commands.registerCommand('docspace.openProjectGraph', () => {
+			GraphPanel.createOrShow(context);
 		}),
 		vscode.commands.registerCommand('docspace.selectDiagramTheme', selectDiagramTheme),
 		vscode.commands.registerCommand('docspace.selectMode', selectMode),

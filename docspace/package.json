@@ -36,6 +36,11 @@
         "icon": "$(folder-opened)"
       },
       {
+        "command": "docspace.openProjectGraph",
+        "title": "Open Project Graph",
+        "icon": "$(type-hierarchy)"
+      },
+      {
         "command": "docspace.newMarkdown",
         "title": "New Markdown File",
         "icon": "$(new-file)"
@@ -121,19 +126,24 @@
       ],
       "view/title": [
         {
-          "command": "docspace.selectRootFolder",
+          "command": "docspace.openProjectGraph",
           "when": "view == docspace.explorer",
           "group": "navigation@1"
         },
         {
-          "command": "docspace.selectDiagramTheme",
+          "command": "docspace.selectRootFolder",
           "when": "view == docspace.explorer",
           "group": "navigation@2"
         },
         {
-          "command": "docspace.selectMode",
+          "command": "docspace.selectDiagramTheme",
           "when": "view == docspace.explorer",
           "group": "navigation@3"
+        },
+        {
+          "command": "docspace.selectMode",
+          "when": "view == docspace.explorer",
+          "group": "navigation@4"
         }
       ]
     },
