@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
+import { CategoryKey } from './config.js';
 
-export type ItemKind = 'category' | 'folder' | 'file';
-export type FilterKey = 'docs' | 'diagrams' | 'canvas' | 'all';
+export type ItemKind = 'category' | 'folder' | 'file' | 'genFolder' | 'genFile';
+/** Every tree node filters by its category's file type. */
+export type FilterKey = CategoryKey;
 
 function buildCommand(uri: vscode.Uri): vscode.Command {
 	const isPreviewable = /\.(md|mmd)$/.test(uri.fsPath);
@@ -15,6 +17,16 @@ function buildCommand(uri: vscode.Uri): vscode.Command {
 	return { command: 'vscode.open', title: 'Open', arguments: [uri] };
 }
 
+const CONTEXT_VALUES: Record<ItemKind, (filterKey?: FilterKey) => string> = {
+	file: () => 'dsFile',
+	folder: () => 'dsFolder',
+	category: (filterKey) => `dsCat_${filterKey ?? 'docs'}`,
+	// Generated docs are read-only: distinct contextValues keep the
+	// rename/delete/new menus (bound to dsFile/dsFolder/dsCat_*) away.
+	genFolder: () => 'dsGenFolder',
+	genFile: () => 'dsGenFile',
+};
+
 export class WorkspaceTreeItem extends vscode.TreeItem {
 	constructor(
 		readonly kind: ItemKind,
@@ -25,7 +37,7 @@ export class WorkspaceTreeItem extends vscode.TreeItem {
 	) {
 		super(
 			label,
-			kind === 'file'
+			kind === 'file' || kind === 'genFile'
 				? vscode.TreeItemCollapsibleState.None
 				: vscode.TreeItemCollapsibleState.Collapsed
 		);
@@ -35,16 +47,10 @@ export class WorkspaceTreeItem extends vscode.TreeItem {
 		if (icon) {
 			this.iconPath = new vscode.ThemeIcon(icon);
 		}
-		if (kind === 'file') {
-			this.contextValue = 'dsFile';
-		} else if (kind === 'folder') {
-			this.contextValue = 'dsFolder';
-		} else if (kind === 'category') {
-			this.contextValue = `dsCat_${filterKey ?? 'all'}`;
-		}
-		if (kind === 'file' && uri) {
+		this.contextValue = CONTEXT_VALUES[kind](filterKey);
+		if ((kind === 'file' || kind === 'genFile') && uri) {
 			this.command = buildCommand(uri);
-			this.tooltip = uri.fsPath;
+			this.tooltip = kind === 'genFile' ? `${uri.fsPath} (gerado — somente leitura)` : uri.fsPath;
 		}
 	}
 }

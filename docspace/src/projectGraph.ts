@@ -4,11 +4,17 @@ import * as path from 'path';
 export type GraphNodeType = 'file' | 'folder' | 'module';
 export type GraphEdgeType = 'imports' | 'dependsOn';
 
+/** Architectural layer detected from the file name/path (swimlanes in Flow mode). */
+export type NodeRole = 'entry' | 'controller' | 'service' | 'repository' | 'model' | 'util' | 'other' | 'external';
+
 export interface GraphNode {
-	data: { id: string; label: string; type: GraphNodeType; path?: string; parent?: string };
+	data: {
+		id: string; label: string; type: GraphNodeType;
+		path?: string; parent?: string; role?: NodeRole; isTest?: boolean;
+	};
 }
 export interface GraphEdge {
-	data: { id: string; source: string; target: string; type: GraphEdgeType };
+	data: { id: string; source: string; target: string; type: GraphEdgeType; weight: number };
 }
 export interface ProjectGraph {
 	nodes: GraphNode[];
@@ -18,7 +24,7 @@ export interface ProjectGraph {
 const MAX_FILES = 1500;
 const RESOLVE_SUFFIXES = ['', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '/index.ts', '/index.js'];
 
-export const CODE_LANGUAGES = new Set([
+const CODE_LANGUAGES = new Set([
 	'typescript', 'javascript', 'typescriptreact', 'javascriptreact',
 	'csharp', 'python', 'go', 'rust', 'java', 'cpp', 'c', 'ruby', 'php', 'swift', 'kotlin',
 ]);
@@ -86,6 +92,27 @@ export function resolveImport(fromFile: string, spec: string, files: Set<string>
 export function packageName(spec: string): string {
 	const parts = spec.split('/');
 	return spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+}
+
+const ROLE_PATTERNS: Array<[RegExp, NodeRole]> = [
+	[/(^|\/)(main|index|app|program|extension|server)\.[^/]+$/i, 'entry'],
+	[/controller|handler|route|endpoint/i, 'controller'],
+	[/service|usecase|use-case|manager|provider/i, 'service'],
+	[/repositor|\brepo\b|dao|store|database|\bdb\b/i, 'repository'],
+	[/model|entity|schema|dto|types?\./i, 'model'],
+	[/util|helper|\blib\b|common|shared|config|constant/i, 'util'],
+];
+
+/** Detect the architectural layer of a file from its workspace-relative path. */
+export function detectRole(relPath: string): NodeRole {
+	for (const [pattern, role] of ROLE_PATTERNS) {
+		if (pattern.test(relPath)) { return role; }
+	}
+	return 'other';
+}
+
+export function isTestFile(relPath: string): boolean {
+	return /\.(test|spec)\.[^/.]+$/i.test(relPath) || /(^|\/)(tests?|__tests__|specs?)\//i.test(relPath);
 }
 
 // ── Cache layer 1: per-file import cache, validated by mtime ──────────────────
@@ -156,23 +183,34 @@ function ensureFolderChain(rel: string, nodes: Map<string, GraphNode>): string {
 	return id;
 }
 
+/** Add or strengthen an edge: repeated imports between a pair raise its weight. */
+function upsertEdge(
+	edges: Map<string, GraphEdge>,
+	id: string,
+	source: string,
+	target: string,
+	type: GraphEdgeType,
+): void {
+	const existing = edges.get(id);
+	if (existing) {
+		existing.data.weight += 1;
+	} else {
+		edges.set(id, { data: { id, source, target, type, weight: 1 } });
+	}
+}
+
 function addEdgeForSpec(
 	file: string,
 	spec: string,
 	fileSet: Set<string>,
 	nodes: Map<string, GraphNode>,
-	edges: GraphEdge[],
-	edgeIds: Set<string>,
+	edges: Map<string, GraphEdge>,
 ): void {
 	const source = `file:${file}`;
 	if (spec.startsWith('.')) {
 		const target = resolveImport(file, spec, fileSet);
 		if (target && target !== file) {
-			const id = `e:${file}->${target}`;
-			if (!edgeIds.has(id)) {
-				edgeIds.add(id);
-				edges.push({ data: { id, source, target: `file:${target}`, type: 'imports' } });
-			}
+			upsertEdge(edges, `e:${file}->${target}`, source, `file:${target}`, 'imports');
 		}
 		return;
 	}
@@ -182,13 +220,9 @@ function addEdgeForSpec(
 	const pkg = packageName(spec);
 	const moduleId = `module:${pkg}`;
 	if (!nodes.has(moduleId)) {
-		nodes.set(moduleId, { data: { id: moduleId, label: pkg, type: 'module' } });
+		nodes.set(moduleId, { data: { id: moduleId, label: pkg, type: 'module', role: 'external' } });
 	}
-	const id = `e:${file}->${pkg}`;
-	if (!edgeIds.has(id)) {
-		edgeIds.add(id);
-		edges.push({ data: { id, source, target: moduleId, type: 'dependsOn' } });
-	}
+	upsertEdge(edges, `e:${file}->${pkg}`, source, moduleId, 'dependsOn');
 }
 
 interface FileEntry { rel: string; langId: string; uri: vscode.Uri; mtime: number }
@@ -240,25 +274,27 @@ export async function buildProjectGraph(rootUri: vscode.Uri, exclude: string[]):
 	const files = fileEntries.map((e) => e.rel);
 	const fileSet = new Set(files);
 	const nodes = new Map<string, GraphNode>();
-	const edges: GraphEdge[] = [];
-	const edgeIds = new Set<string>();
+	const edges = new Map<string, GraphEdge>();
 
 	for (const file of files) {
 		const dir = path.posix.dirname(file);
 		const parent = dir === '.' ? undefined : ensureFolderChain(dir, nodes);
 		nodes.set(`file:${file}`, {
-			data: { id: `file:${file}`, label: path.posix.basename(file), type: 'file', path: file, parent },
+			data: {
+				id: `file:${file}`, label: path.posix.basename(file), type: 'file', path: file, parent,
+				role: detectRole(file), isTest: isTestFile(file),
+			},
 		});
 	}
 
 	for (const entry of fileEntries) {
 		const imports = await resolveImportsForFile(entry);
 		for (const spec of imports) {
-			addEdgeForSpec(entry.rel, spec, fileSet, nodes, edges, edgeIds);
+			addEdgeForSpec(entry.rel, spec, fileSet, nodes, edges);
 		}
 	}
 
-	const graph: ProjectGraph = { nodes: [...nodes.values()], edges };
+	const graph: ProjectGraph = { nodes: [...nodes.values()], edges: [...edges.values()] };
 	graphCache = { key: cacheKey, graph };
 	return graph;
 }

@@ -19,7 +19,6 @@ export async function hasMermaidBlock(uri: vscode.Uri): Promise<boolean> {
 /** Cheap check based on the filename alone — never touches file contents. */
 export function isRelevantByName(name: string, filterKey: FilterKey): boolean {
 	switch (filterKey) {
-		case 'all': return /\.(md|mmd|excalidraw)$/.test(name);
 		case 'docs': return name.endsWith('.md');
 		case 'diagrams': return name.endsWith('.mmd');
 		case 'canvas': return name.endsWith('.excalidraw');

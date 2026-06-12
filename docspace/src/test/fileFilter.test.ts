@@ -8,8 +8,9 @@ suite('fileFilter', () => {
 		assert.strictEqual(isRelevantByName('flow.mmd', 'diagrams'), true);
 		assert.strictEqual(isRelevantByName('sketch.excalidraw', 'canvas'), true);
 		assert.strictEqual(isRelevantByName('sketch.excalidraw', 'docs'), false);
-		assert.strictEqual(isRelevantByName('main.ts', 'all'), false);
-		assert.strictEqual(isRelevantByName('readme.md', 'all'), true);
+		assert.strictEqual(isRelevantByName('main.ts', 'docs'), false);
+		assert.strictEqual(isRelevantByName('main.ts', 'diagrams'), false);
+		assert.strictEqual(isRelevantByName('main.ts', 'canvas'), false);
 	});
 
 	test('only .md files under the diagrams filter need a content check', () => {

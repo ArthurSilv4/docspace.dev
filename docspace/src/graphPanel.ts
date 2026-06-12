@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { getConfig, resolveRootUri, workspaceRoot } from './config.js';
+import { configTarget, getExclude, workspaceRoot } from './config.js';
 import { buildProjectGraph } from './projectGraph.js';
 
 const CYTOSCAPE_VERSION = '3.34.0';
@@ -9,11 +9,12 @@ const CYTOSCAPE_VERSION = '3.34.0';
 const FCOSE_VERSION = '2.2.0';
 const COSE_BASE_VERSION = '2.2.0';
 const LAYOUT_BASE_VERSION = '2.0.1';
-// dagre layered layout (Flow view) — UMD requires the dagre global first
-const DAGRE_VERSION = '0.8.5';
-const CYTOSCAPE_DAGRE_VERSION = '2.5.0';
 
-interface WebviewMessage { type: string; path?: string }
+interface WebviewMessage { type: string; path?: string; theme?: string }
+
+function graphTheme(): string {
+	return vscode.workspace.getConfiguration('docspace').get<string>('graphTheme', 'auto');
+}
 
 export class GraphPanel {
 	private static current: GraphPanel | undefined;
@@ -45,15 +46,25 @@ export class GraphPanel {
 		panel.webview.html = instance.buildHtml();
 
 		const messageListener = panel.webview.onDidReceiveMessage((msg: WebviewMessage) => instance.onMessage(msg));
+		const configListener = vscode.workspace.onDidChangeConfiguration((e) => {
+			if (e.affectsConfiguration('docspace.graphTheme')) {
+				panel.webview.postMessage({ type: 'theme', theme: graphTheme() });
+			}
+		});
 		panel.onDidDispose(() => {
 			GraphPanel.current = undefined;
 			messageListener.dispose();
+			configListener.dispose();
 		});
 	}
 
 	private async onMessage(msg: WebviewMessage): Promise<void> {
 		if (msg.type === 'ready' || msg.type === 'refresh') {
 			await this.sendGraph();
+			return;
+		}
+		if (msg.type === 'setTheme' && msg.theme) {
+			await vscode.workspace.getConfiguration('docspace').update('graphTheme', msg.theme, configTarget());
 			return;
 		}
 		if (msg.type === 'open' && msg.path) {
@@ -65,16 +76,17 @@ export class GraphPanel {
 	}
 
 	private async sendGraph(): Promise<void> {
-		const root = resolveRootUri() ?? workspaceRoot();
+		const root = workspaceRoot();
 		if (!root) {
 			await this.panel.webview.postMessage({ type: 'error', message: 'No workspace open.' });
 			return;
 		}
 		try {
-			const graph = await buildProjectGraph(root, getConfig().exclude);
+			const graph = await buildProjectGraph(root, getExclude());
 			await this.panel.webview.postMessage({
 				type: 'graph',
 				graph,
+				theme: graphTheme(),
 				rootName: path.basename(root.fsPath),
 			});
 		} catch (err) {
@@ -101,31 +113,43 @@ export class GraphPanel {
 </head>
 <body>
   <div class="toolbar">
-    <div class="segmented" role="group" aria-label="Layout mode">
-      <button id="mode-network" class="active" title="Force layout — structure and clusters">Network</button>
-      <button id="mode-flow" title="Layered layout — dependency flow, top to bottom">Flow</button>
+    <div class="segmented" role="group" aria-label="Graph mode">
+      <button id="mode-deps" class="active" title="Rede de imports entre arquivos">Dependências</button>
+      <button id="mode-flow" title="Camadas top→down por papel detectado">Fluxo</button>
+      <button id="mode-impact" title="Clique num arquivo e veja quem seria afetado">Impacto</button>
     </div>
-    <input id="search" type="search" placeholder="Search files… (Enter to zoom)" aria-label="Search nodes">
+    <input id="search" type="search" placeholder="Buscar arquivo… (Enter aproxima)" aria-label="Search nodes">
     <select id="folder-filter" aria-label="Filter by folder">
-      <option value="">All folders</option>
+      <option value="">Todas as pastas</option>
     </select>
     <select id="type-filter" aria-label="Filter by type">
-      <option value="all">Files + modules</option>
-      <option value="files">Files only</option>
+      <option value="all">Arquivos + módulos</option>
+      <option value="files">Só arquivos</option>
+    </select>
+    <label class="check" title="Oculta arquivos .test. / .spec.">
+      <input id="hide-tests" type="checkbox"> sem testes
+    </label>
+    <select id="theme-select" aria-label="Tema do grafo" title="Tema do grafo">
+      <option value="auto">Tema: auto</option>
+      <option value="obsidian">Tema: obsidian</option>
+      <option value="blueprint">Tema: blueprint</option>
+      <option value="pastel">Tema: pastel</option>
+      <option value="high-contrast">Tema: high-contrast</option>
     </select>
     <span class="spacer"></span>
     <span id="stats" class="stats"></span>
-    <button id="fit" title="Fit graph to view">Fit</button>
-    <button id="refresh" title="Rebuild the graph">Refresh</button>
+    <button id="fit" title="Ajustar à tela">Fit</button>
+    <button id="refresh" title="Reconstruir o grafo">Refresh</button>
   </div>
-  <div id="cy" role="application" aria-label="Project dependency graph"></div>
+  <div id="graph-wrap">
+    <div id="cy" role="application" aria-label="Project dependency graph"></div>
+    <div id="lanes" aria-hidden="true"></div>
+  </div>
   <div id="overlay" class="overlay"><div class="spinner"></div><span id="overlay-text">Building project graph…</span></div>
   <script src="https://cdn.jsdelivr.net/npm/cytoscape@${CYTOSCAPE_VERSION}/dist/cytoscape.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/layout-base@${LAYOUT_BASE_VERSION}/layout-base.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cose-base@${COSE_BASE_VERSION}/cose-base.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cytoscape-fcose@${FCOSE_VERSION}/cytoscape-fcose.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dagre@${DAGRE_VERSION}/dist/dagre.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@${CYTOSCAPE_DAGRE_VERSION}/cytoscape-dagre.js"></script>
   <script src="${jsUri}"></script>
 </body>
 </html>`;

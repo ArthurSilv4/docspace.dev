@@ -4,19 +4,42 @@
 
 	const vscode = acquireVsCodeApi();
 	const cyEl = document.getElementById('cy');
+	const lanesEl = document.getElementById('lanes');
 	const searchEl = document.getElementById('search');
 	const folderSel = document.getElementById('folder-filter');
 	const typeSel = document.getElementById('type-filter');
+	const hideTestsEl = document.getElementById('hide-tests');
+	const themeSel = document.getElementById('theme-select');
 	const statsEl = document.getElementById('stats');
 	const overlayEl = document.getElementById('overlay');
 	const overlayText = document.getElementById('overlay-text');
 
 	let cy = null;
-	let layoutMode = 'network'; // 'network' (force) | 'flow' (layered, top→down)
+	let mode = 'deps'; // 'deps' (force) | 'flow' (swimlanes top→down) | 'impact' (click → affected)
+	let themeName = 'auto';
+	let currentGraph = null;
+	let laneMeta = []; // [{ name, y }] for the Flow overlay
+	let baseStats = '';
 
-	// Obsidian-like group palette (soft hues on a dark canvas); modules stay muted
-	const GROUP_COLORS = ['#7aa2f7', '#9ece6a', '#e0af68', '#bb9af7', '#f7768e', '#2ac3de', '#ff9e64', '#73daca'];
-	const MODULE_COLOR = '#6b7089';
+	// ── Themes ──────────────────────────────────────────────────────────────────
+	const THEMES = {
+		obsidian: {
+			bg: '#1e1e2e', fg: '#9a9fb0', edge: '#4a4f63', module: '#6b7089', accent: '#7aa2f7',
+			palette: ['#7aa2f7', '#9ece6a', '#e0af68', '#bb9af7', '#f7768e', '#2ac3de', '#ff9e64', '#73daca'],
+		},
+		blueprint: {
+			bg: '#0b1d33', fg: '#bcd6f2', edge: '#3f6c9e', module: '#5a82ab', accent: '#ffffff',
+			palette: ['#9fc6ff', '#7fb3f5', '#bfe0ff', '#dcecff', '#6fa8e8', '#8ec9f2', '#a8d8ff', '#cfe6ff'],
+		},
+		pastel: {
+			bg: '#faf7f2', fg: '#6a655e', edge: '#c9c2b8', module: '#a8a299', accent: '#e07a5f',
+			palette: ['#7eb5a6', '#e8a0a0', '#a0b8e8', '#d8b86e', '#b89fd8', '#88c5d8', '#e8b58e', '#9fcf9f'],
+		},
+		'high-contrast': {
+			bg: '#000000', fg: '#ffffff', edge: '#666666', module: '#999999', accent: '#ffffff',
+			palette: ['#00e5ff', '#ffe600', '#ff3d71', '#00ff9c', '#ff8a00', '#c77dff', '#00b3ff', '#aaff00'],
+		},
+	};
 
 	function cssVar(name, fallback) {
 		// cytoscape rejects quoted font names, so strip quotes from the value
@@ -24,19 +47,33 @@
 		return value || fallback;
 	}
 
+	/** 'auto' follows the VS Code theme: editor colors + a matching palette. */
+	function resolveTheme(name) {
+		if (THEMES[name]) { return THEMES[name]; }
+		const light = document.body.classList.contains('vscode-light');
+		const base = light ? THEMES.pastel : THEMES.obsidian;
+		return {
+			...base,
+			bg: cssVar('--vscode-editor-background', base.bg),
+			fg: cssVar('--vscode-descriptionForeground', base.fg),
+			edge: cssVar('--vscode-editorLineNumber-foreground', base.edge),
+			accent: cssVar('--vscode-focusBorder', base.accent),
+		};
+	}
+
+	function theme() { return resolveTheme(themeName); }
+
+	// ── Elements ────────────────────────────────────────────────────────────────
 	function topFolder(p) {
 		return p && p.includes('/') ? p.slice(0, p.indexOf('/')) : '';
 	}
 
-	/**
-	 * Obsidian style: no folder boxes — files and external modules become dots,
-	 * colored by top-level folder and sized by their number of connections.
-	 */
 	function toElements(graph) {
+		const t = theme();
 		const groupColor = new Map();
 		const colorFor = (group) => {
 			if (!groupColor.has(group)) {
-				groupColor.set(group, GROUP_COLORS[groupColor.size % GROUP_COLORS.length]);
+				groupColor.set(group, t.palette[groupColor.size % t.palette.length]);
 			}
 			return groupColor.get(group);
 		};
@@ -57,19 +94,24 @@
 					label: n.data.label,
 					type: n.data.type,
 					path: n.data.path,
+					role: n.data.role || (n.data.type === 'module' ? 'external' : 'other'),
+					isTest: n.data.isTest ? 1 : 0,
 					size: 9 + 24 * Math.sqrt(deg / maxDegree),
-					color: n.data.type === 'module' ? MODULE_COLOR : colorFor(topFolder(n.data.path)),
+					color: n.data.type === 'module' ? t.module : colorFor(topFolder(n.data.path)),
 				} };
 			});
 
 		return { nodes, edges: graph.edges.map((e) => ({ data: e.data })) };
 	}
 
+	// ── Style ───────────────────────────────────────────────────────────────────
+	function edgeWidth(ele) {
+		const w = ele.data('weight') || 1;
+		return Math.min(1 + (w - 1) * 0.8, 4);
+	}
+
 	function buildStyle() {
-		const fg = cssVar('--vscode-descriptionForeground', '#9a9fb0');
-		const fgFull = cssVar('--vscode-foreground', '#cdd6f4');
-		const accent = cssVar('--vscode-focusBorder', '#7aa2f7');
-		const edge = cssVar('--vscode-editorLineNumber-foreground', '#4a4f63');
+		const t = theme();
 		return [
 			{ selector: 'node', style: {
 				width: 'data(size)', height: 'data(size)',
@@ -77,13 +119,12 @@
 				'background-opacity': 0.92,
 				'border-width': 0,
 				label: 'data(label)',
-				color: fg,
+				color: t.fg,
 				'font-family': cssVar('--vscode-font-family', 'sans-serif'),
 				'font-size': 9,
 				'text-valign': 'bottom', 'text-halign': 'center',
 				'text-margin-y': 5,
 				'text-opacity': 0.8,
-				// Obsidian behavior: labels fade out when zoomed away
 				'min-zoomed-font-size': 8,
 				'transition-property': 'opacity, background-opacity, text-opacity',
 				'transition-duration': '120ms',
@@ -92,7 +133,13 @@
 				'background-opacity': 0.5,
 				'text-opacity': 0.55,
 			} },
-			// ── Flow mode node styles ──────────────────────────────────────────────
+			// Entry points: no one imports them — emphasized ring in every mode
+			{ selector: 'node.entry', style: {
+				'border-width': 2.5,
+				'border-color': t.accent,
+				'border-opacity': 0.9,
+			} },
+			// Flow mode: pill-shaped nodes with the label inside
 			{ selector: 'node.flow-node', style: {
 				shape: 'round-rectangle',
 				width: 'label',
@@ -104,24 +151,25 @@
 				'border-color': 'data(color)',
 				'border-opacity': 0.85,
 				label: 'data(label)',
-				color: fgFull,
+				color: t.fg,
 				'font-size': 11,
 				'text-valign': 'center',
 				'text-halign': 'center',
 				'text-opacity': 1,
+				// long filenames get ellipsized; keep in sync with MAX_PILL_W
+				'text-wrap': 'ellipsis',
+				'text-max-width': 168,
 				'min-zoomed-font-size': 7,
 			} },
 			{ selector: 'node.flow-node[type="module"]', style: {
 				'background-opacity': 0.08,
 				'border-style': 'dashed',
-				color: cssVar('--vscode-descriptionForeground', '#6b7089'),
 				'font-size': 10,
 			} },
-			// ── Edges ─────────────────────────────────────────────────────────────
 			{ selector: 'edge', style: {
-				width: 1,
+				width: edgeWidth,
 				'curve-style': 'haystack', 'haystack-radius': 0,
-				'line-color': edge,
+				'line-color': t.edge,
 				opacity: 0.32,
 				'transition-property': 'opacity',
 				'transition-duration': '120ms',
@@ -130,19 +178,41 @@
 			// Flow view: direction matters, so edges get arrows (haystack can't draw them)
 			{ selector: 'edge.flow', style: {
 				'curve-style': 'bezier',
+				'control-point-step-size': 28,
 				'target-arrow-shape': 'triangle',
-				'target-arrow-color': edge,
-				'line-color': edge,
+				'target-arrow-color': t.edge,
+				'line-color': t.edge,
 				'arrow-scale': 0.8,
-				width: 1.5,
-				opacity: 0.55,
+				width: edgeWidth,
+				// quieter than the focused trail so the structure reads first
+				opacity: 0.3,
 			} },
-			// ── Selection and focus ───────────────────────────────────────────────
+			{ selector: 'edge.flow[type="dependsOn"]', style: { opacity: 0.14 } },
+			// Execution trail from a clicked entry point (Flow mode)
+			{ selector: 'edge.trail', style: {
+				'line-color': t.accent, 'target-arrow-color': t.accent, opacity: 0.95, 'z-index': 9,
+			} },
+			{ selector: 'node.trail', style: {
+				'background-opacity': 1, 'text-opacity': 1,
+				'border-width': 2, 'border-color': t.accent,
+			} },
+			// Impact mode: source + everything that would be affected
+			{ selector: 'node.impact-src', style: {
+				'background-opacity': 1, 'text-opacity': 1,
+				'border-width': 3, 'border-color': t.accent,
+			} },
+			{ selector: 'node.impact-hit', style: {
+				'background-opacity': 1, 'text-opacity': 1,
+				'border-width': 1.5, 'border-color': t.accent, 'border-opacity': 0.6,
+			} },
+			{ selector: 'edge.impact-hit', style: {
+				'line-color': t.accent, opacity: 0.8,
+			} },
 			{ selector: 'node:selected', style: {
-				'border-width': 2.5, 'border-color': accent, 'text-opacity': 1,
+				'border-width': 2.5, 'border-color': t.accent, 'text-opacity': 1,
 			} },
 			{ selector: '.search-hit', style: {
-				'border-width': 2.5, 'border-color': accent, 'text-opacity': 1,
+				'border-width': 2.5, 'border-color': t.accent, 'text-opacity': 1,
 			} },
 			{ selector: 'node.hl', style: { 'background-opacity': 1, 'text-opacity': 1 } },
 			{ selector: 'edge.hl', style: { opacity: 0.85 } },
@@ -151,14 +221,132 @@
 		];
 	}
 
+	function applyTheme(name) {
+		themeName = name;
+		themeSel.value = name;
+		const t = theme();
+		cyEl.style.background = t.bg;
+		lanesEl.style.color = t.fg;
+		if (currentGraph) { render(currentGraph); }
+	}
+
+	// ── Layout ──────────────────────────────────────────────────────────────────
+	const LANES = ['entry', 'controller', 'service', 'repository', 'model', 'util', 'other', 'external'];
+	const LANE_LABELS = {
+		entry: 'Entry points', controller: 'Controllers', service: 'Services',
+		repository: 'Repositories', model: 'Models', util: 'Utils', other: 'Outros', external: 'Externos',
+	};
+	const ROW_H = 58;        // vertical distance between sub-rows inside a lane
+	const LANE_PAD = 34;     // band padding above/below the rows
+	const LANE_GAP = 26;     // gap between consecutive bands
+	const NODE_GAP = 26;     // horizontal gap between pills
+	const MAX_ROW_W = 1050;  // wrap a lane into sub-rows beyond this width
+	const MAX_PILL_W = 168;  // must mirror text-max-width in the flow-node style
+
+	function laneOf(node) {
+		if (node.data('type') === 'module') { return 'external'; }
+		if (node.hasClass('entry')) { return 'entry'; }
+		return node.data('role') || 'other';
+	}
+
+	/** Approximate rendered pill width so rows can be packed without overlap. */
+	function pillWidth(node) {
+		return Math.min(28 + node.data('label').length * 6.4, MAX_PILL_W + 28);
+	}
+
+	/**
+	 * Order a lane by the average x of already-placed neighbors (barycenter):
+	 * nodes land underneath whoever imports them, minimizing edge crossings.
+	 */
+	function orderLane(nodes, placedX) {
+		const score = (n) => {
+			const xs = [];
+			n.connectedEdges().forEach((e) => {
+				const other = e.source().id() === n.id() ? e.target() : e.source();
+				if (placedX.has(other.id())) { xs.push(placedX.get(other.id())); }
+			});
+			return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+		};
+		return nodes
+			.map((n) => ({ n, s: score(n) }))
+			.sort((a, b) => {
+				if (a.s !== null && b.s !== null && a.s !== b.s) { return a.s - b.s; }
+				if (a.s !== null && b.s === null) { return -1; }
+				if (a.s === null && b.s !== null) { return 1; }
+				return a.n.data('label').localeCompare(b.n.data('label'));
+			})
+			.map((x) => x.n);
+	}
+
+	/** Pack ordered nodes into centered sub-rows no wider than MAX_ROW_W. */
+	function packRows(nodes) {
+		const rows = [];
+		let row = [];
+		let width = 0;
+		for (const n of nodes) {
+			const w = pillWidth(n) + NODE_GAP;
+			if (row.length > 0 && width + w > MAX_ROW_W) {
+				rows.push(row);
+				row = [];
+				width = 0;
+			}
+			row.push(n);
+			width += w;
+		}
+		if (row.length) { rows.push(row); }
+		return rows;
+	}
+
+	/**
+	 * Fixed horizontal swimlanes: one band per detected role. Lanes are laid
+	 * out top→down; within a lane, nodes sit near their importers (barycenter)
+	 * and wrap into sub-rows so wide projects stay readable.
+	 */
+	function flowLayoutData() {
+		const visible = cy.nodes().not('.hidden');
+		const byLane = new Map();
+		visible.forEach((n) => {
+			const lane = laneOf(n);
+			if (!byLane.has(lane)) { byLane.set(lane, []); }
+			byLane.get(lane).push(n);
+		});
+
+		const positions = {};
+		const placedX = new Map();
+		laneMeta = [];
+		let laneTop = 0;
+
+		for (const lane of LANES.filter((l) => byLane.has(l))) {
+			const ordered = orderLane(byLane.get(lane), placedX);
+			const rows = packRows(ordered);
+
+			rows.forEach((row, r) => {
+				const rowWidth = row.reduce((sum, n) => sum + pillWidth(n) + NODE_GAP, -NODE_GAP);
+				let x = -rowWidth / 2;
+				for (const n of row) {
+					const w = pillWidth(n);
+					positions[n.id()] = { x: x + w / 2, y: laneTop + r * ROW_H };
+					placedX.set(n.id(), x + w / 2);
+					x += w + NODE_GAP;
+				}
+			});
+
+			const bandTop = laneTop - LANE_PAD;
+			const bandHeight = (rows.length - 1) * ROW_H + 2 * LANE_PAD;
+			laneMeta.push({ name: lane, top: bandTop, height: bandHeight });
+			laneTop = bandTop + bandHeight + LANE_GAP + LANE_PAD;
+		}
+		return positions;
+	}
+
 	function layoutOptions() {
-		if (layoutMode === 'flow') {
-			// importer above imported: read the system top→down like a narrative
-			return typeof window.cytoscapeDagre !== 'undefined'
-				? { name: 'dagre', rankDir: 'TB', ranker: 'tight-tree',
-					nodeSep: 40, edgeSep: 15, rankSep: 80, padding: 60,
-					animate: true, animationDuration: 450, fit: true }
-				: { name: 'breadthfirst', directed: true, padding: 50, spacingFactor: 1.2 };
+		if (mode === 'flow') {
+			const positions = flowLayoutData();
+			return {
+				name: 'preset',
+				positions: (n) => positions[n.id()] || { x: 0, y: 0 },
+				animate: true, animationDuration: 450, padding: 60, fit: true,
+			};
 		}
 		const fcose = typeof window.cytoscapeFcose !== 'undefined';
 		return fcose
@@ -168,36 +356,90 @@
 			: { name: 'cose', animate: false, padding: 50, nodeRepulsion: 12000, idealEdgeLength: 80 };
 	}
 
-	/**
-	 * Apply visual mode to nodes: Network restores circular dots, Flow switches
-	 * to pill-shaped labels with root nodes highlighted. Always call this after
-	 * layout has settled so root identification reflects the visible graph.
-	 */
-	function applyModeStyle(mode) {
-		if (!cy) { return; }
-		if (mode === 'network') {
-			cy.nodes().removeClass('flow-node flow-root');
-			cy.nodes().removeStyle();
-		} else {
-			cy.nodes().removeClass('flow-root');
-			cy.nodes().not('.hidden').addClass('flow-node');
-			const roots = cy.nodes('.flow-node').filter((n) => n.indegree(false) === 0);
-			roots.addClass('flow-root');
-			roots.style({ 'background-opacity': 0.32, 'border-width': 2 });
+	// ── Flow lane overlay ───────────────────────────────────────────────────────
+	function updateLaneOverlay() {
+		if (mode !== 'flow' || !cy) {
+			lanesEl.innerHTML = '';
+			return;
 		}
+		const zoom = cy.zoom();
+		const pan = cy.pan();
+		lanesEl.innerHTML = '';
+		laneMeta.forEach(({ name, top, height }, i) => {
+			const screenTop = top * zoom + pan.y;
+			const screenHeight = height * zoom;
+			if (screenTop + screenHeight < 0 || screenTop > cyEl.clientHeight) { return; }
+			const band = document.createElement('div');
+			band.className = 'lane-band' + (i % 2 ? ' alt' : '');
+			band.style.top = `${screenTop}px`;
+			band.style.height = `${screenHeight}px`;
+			const label = document.createElement('span');
+			label.className = 'lane-label';
+			label.textContent = LANE_LABELS[name] || name;
+			band.appendChild(label);
+			lanesEl.appendChild(band);
+		});
 	}
 
-	function setLayoutMode(mode) {
-		layoutMode = mode;
-		document.getElementById('mode-network').classList.toggle('active', mode === 'network');
-		document.getElementById('mode-flow').classList.toggle('active', mode === 'flow');
+	// ── Mode handling ───────────────────────────────────────────────────────────
+	function clearModeClasses() {
+		cy.elements().removeClass('flow-node flow trail impact-src impact-hit dim hl');
+		statsEl.textContent = baseStats;
+	}
+
+	function applyModeStyle() {
 		if (!cy) { return; }
-		cy.edges().toggleClass('flow', mode === 'flow');
-		cy.layout(layoutOptions()).run();
-		applyModeStyle(mode);
+		clearModeClasses();
+		if (mode === 'flow') {
+			cy.nodes().not('.hidden').addClass('flow-node');
+			cy.edges().addClass('flow');
+		}
+		updateLaneOverlay();
 	}
 
-	// ── hover: spotlight the neighborhood, fade the rest (Obsidian-style) ──
+	function setMode(next) {
+		mode = next;
+		for (const m of ['deps', 'flow', 'impact']) {
+			document.getElementById(`mode-${m}`).classList.toggle('active', m === next);
+		}
+		if (!cy) { return; }
+		clearModeClasses();
+		cy.layout(layoutOptions()).run();
+		applyModeStyle();
+	}
+
+	// ── Interactions per mode ───────────────────────────────────────────────────
+	function traceTrail(node) {
+		const trail = node.successors().union(node);
+		cy.batch(() => {
+			cy.elements().removeClass('trail dim');
+			cy.elements().not(trail).addClass('dim');
+			trail.addClass('trail');
+		});
+		statsEl.textContent = `Trilha de ${node.data('label')}: ${trail.nodes().length} arquivos`;
+	}
+
+	function showImpact(node) {
+		const affected = node.predecessors(); // who imports it, recursively
+		const keep = affected.union(node);
+		cy.batch(() => {
+			cy.elements().removeClass('impact-src impact-hit dim');
+			cy.elements().not(keep).addClass('dim');
+			node.addClass('impact-src');
+			affected.addClass('impact-hit');
+		});
+		const count = affected.nodes().length;
+		statsEl.textContent = `${count} arquivo${count === 1 ? '' : 's'} afetado${count === 1 ? '' : 's'} por mudança em ${node.data('label')}`;
+	}
+
+	function clearInteraction() {
+		cy.batch(() => {
+			cy.elements().removeClass('trail impact-src impact-hit dim hl');
+		});
+		statsEl.textContent = baseStats;
+		applySearch();
+	}
+
 	function focusNeighborhood(node) {
 		const hood = node.closedNeighborhood();
 		cy.batch(() => {
@@ -206,45 +448,61 @@
 		});
 	}
 
-	function clearFocus() {
-		cy.batch(() => {
-			cy.elements().removeClass('dim hl');
-		});
-		applySearch();
+	function openNode(node) {
+		const data = node.data();
+		if (data.type === 'file' && data.path) {
+			vscode.postMessage({ type: 'open', path: data.path });
+		}
+	}
+
+	// ── Render ──────────────────────────────────────────────────────────────────
+	function markEntryPoints() {
+		cy.nodes('[type="file"]')
+			.filter((n) => n.incomers('edge[type="imports"]').length === 0)
+			.addClass('entry');
 	}
 
 	function render(graph) {
+		currentGraph = graph;
 		if (cy) { cy.destroy(); }
 		cy = cytoscape({
 			container: cyEl,
 			elements: toElements(graph),
 			style: buildStyle(),
-			layout: layoutOptions(),
+			layout: { name: 'null' },
 			pixelRatio: 'auto',
 		});
 
-		if (layoutMode === 'flow') { cy.edges().addClass('flow'); }
+		markEntryPoints();
 
 		cy.on('tap', 'node', (ev) => {
-			const data = ev.target.data();
-			if (data.type === 'file' && data.path) {
-				vscode.postMessage({ type: 'open', path: data.path });
-			}
+			const node = ev.target;
+			if (mode === 'flow') { traceTrail(node); return; }
+			if (mode === 'impact') { showImpact(node); return; }
+			openNode(node);
+		});
+		cy.on('dbltap', 'node', (ev) => openNode(ev.target));
+		cy.on('tap', (ev) => {
+			if (ev.target === cy && mode !== 'deps') { clearInteraction(); }
 		});
 		cy.on('mouseover', 'node', (ev) => {
 			cyEl.style.cursor = 'pointer';
-			focusNeighborhood(ev.target);
+			if (mode === 'deps') { focusNeighborhood(ev.target); }
 		});
 		cy.on('mouseout', 'node', () => {
 			cyEl.style.cursor = 'default';
-			clearFocus();
+			if (mode === 'deps') { clearInteraction(); }
 		});
+		cy.on('viewport', updateLaneOverlay);
 
-		applyModeStyle(layoutMode);
+		applyFilters({ relayout: false });
+		cy.layout(layoutOptions()).run();
+		applyModeStyle();
 
 		const files = graph.nodes.filter((n) => n.data.type === 'file').length;
 		const modules = graph.nodes.filter((n) => n.data.type === 'module').length;
-		statsEl.textContent = `${files} files · ${modules} modules · ${graph.edges.length} links`;
+		baseStats = `${files} arquivos · ${modules} módulos · ${graph.edges.length} conexões`;
+		statsEl.textContent = baseStats;
 	}
 
 	function populateFolderFilter(graph) {
@@ -263,10 +521,13 @@
 		folderSel.value = [...folderSel.options].some((o) => o.value === current) ? current : '';
 	}
 
-	function applyFilters() {
+	// ── Filters ─────────────────────────────────────────────────────────────────
+	function applyFilters(opts) {
 		if (!cy) { return; }
+		const relayout = !opts || opts.relayout !== false;
 		const folder = folderSel.value;
 		const filesOnly = typeSel.value === 'files';
+		const hideTests = hideTestsEl.checked;
 		cy.batch(() => {
 			cy.elements().removeClass('hidden');
 			cy.nodes().forEach((n) => {
@@ -275,12 +536,13 @@
 					if (filesOnly) { n.addClass('hidden'); }
 					return;
 				}
+				if (hideTests && d.isTest) { n.addClass('hidden'); return; }
 				if (folder && d.path !== folder && !(d.path || '').startsWith(folder + '/')) {
 					n.addClass('hidden');
 				}
 			});
 			// modules survive a folder filter only when linked to a visible file
-			if (folder && !filesOnly) {
+			if ((folder || hideTests) && !filesOnly) {
 				cy.nodes('[type="module"]').forEach((m) => {
 					const linked = m.connectedEdges().some((e) =>
 						!e.source().hasClass('hidden') && !e.target().hasClass('hidden'));
@@ -289,21 +551,25 @@
 			}
 		});
 
-		// Relayout only when a filter is active — render() already laid out the
-		// full graph, and a second run here would cancel its animation.
-		if (folder || filesOnly) {
+		// Relayout only when a filter is active — render() lays out the full
+		// graph itself, and a second run here would cancel its animation.
+		if (relayout && (folder || filesOnly || hideTests)) {
 			const visible = cy.elements().not('.hidden');
 			const filterLayout = visible.layout({ ...layoutOptions(), animate: true, animationDuration: 300 });
 			filterLayout.on('layoutstop', () => {
 				cy.animate({ fit: { eles: visible, padding: 50 }, duration: 200 });
-				if (layoutMode === 'flow') { applyModeStyle('flow'); }
+				applyModeStyle();
 			});
 			filterLayout.run();
+		} else if (relayout) {
+			cy.layout(layoutOptions()).run();
+			applyModeStyle();
 		}
 
 		applySearch();
 	}
 
+	// ── Search ──────────────────────────────────────────────────────────────────
 	function matchingNodes() {
 		const query = searchEl.value.trim().toLowerCase();
 		if (!query) { return null; }
@@ -335,7 +601,7 @@
 		cy.elements().not(keep).addClass('dim');
 
 		// Highlight is instant; the relayout waits for a typing pause and only
-		// fires when the query actually changed (clearFocus also calls us on hover).
+		// fires when the query actually changed (clearInteraction also calls us).
 		if (matches.length > 0 && query !== lastLayoutQuery) {
 			lastLayoutQuery = query;
 			clearTimeout(searchLayoutTimer);
@@ -343,6 +609,7 @@
 		}
 	}
 
+	// ── Wire up ─────────────────────────────────────────────────────────────────
 	searchEl.addEventListener('input', applySearch);
 	searchEl.addEventListener('keydown', (ev) => {
 		if (ev.key !== 'Enter' || !cy) { return; }
@@ -352,11 +619,18 @@
 		}
 	});
 
-	folderSel.addEventListener('change', applyFilters);
-	typeSel.addEventListener('change', applyFilters);
+	folderSel.addEventListener('change', () => applyFilters());
+	typeSel.addEventListener('change', () => applyFilters());
+	hideTestsEl.addEventListener('change', () => applyFilters());
 
-	document.getElementById('mode-network').addEventListener('click', () => setLayoutMode('network'));
-	document.getElementById('mode-flow').addEventListener('click', () => setLayoutMode('flow'));
+	themeSel.addEventListener('change', () => {
+		applyTheme(themeSel.value);
+		vscode.postMessage({ type: 'setTheme', theme: themeSel.value });
+	});
+
+	document.getElementById('mode-deps').addEventListener('click', () => setMode('deps'));
+	document.getElementById('mode-flow').addEventListener('click', () => setMode('flow'));
+	document.getElementById('mode-impact').addEventListener('click', () => setMode('impact'));
 
 	document.getElementById('fit').addEventListener('click', () => {
 		if (cy) { cy.animate({ fit: { padding: 50 }, duration: 250 }); }
@@ -371,10 +645,15 @@
 	window.addEventListener('message', (event) => {
 		const msg = event.data;
 		if (msg.type === 'graph') {
+			themeName = msg.theme || themeName;
+			themeSel.value = themeName;
+			cyEl.style.background = theme().bg;
+			lanesEl.style.color = theme().fg;
 			render(msg.graph);
 			populateFolderFilter(msg.graph);
-			applyFilters();
 			overlayEl.classList.add('hidden');
+		} else if (msg.type === 'theme') {
+			applyTheme(msg.theme);
 		} else if (msg.type === 'error') {
 			overlayText.textContent = msg.message;
 			overlayEl.querySelector('.spinner').style.display = 'none';

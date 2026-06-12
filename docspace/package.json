@@ -3,7 +3,7 @@
   "displayName": "Docspace Workspace",
   "description": "Visualize and manage Markdown, Mermaid diagrams and Excalidraw canvases inside VS Code.",
   "publisher": "ArthurSilv4",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "engines": {
     "vscode": "^1.120.0"
   },
@@ -26,14 +26,14 @@
         "icon": "$(symbol-color)"
       },
       {
-        "command": "docspace.selectMode",
-        "title": "Change Discovery Mode",
+        "command": "docspace.configureCategory",
+        "title": "Configurar Categoria…",
         "icon": "$(gear)"
       },
       {
-        "command": "docspace.selectRootFolder",
-        "title": "Choose Docs Folder",
-        "icon": "$(folder-opened)"
+        "command": "docspace.regenerateDoc",
+        "title": "Regenerar Doc",
+        "icon": "$(book)"
       },
       {
         "command": "docspace.openProjectGraph",
@@ -69,6 +69,11 @@
     "menus": {
       "view/item/context": [
         {
+          "command": "docspace.configureCategory",
+          "when": "view == docspace.explorer && viewItem =~ /^dsCat_/",
+          "group": "docspace@0"
+        },
+        {
           "command": "docspace.newMarkdown",
           "when": "view == docspace.explorer && viewItem == dsCat_docs",
           "group": "docspace@1"
@@ -99,28 +104,13 @@
           "group": "docspace@3"
         },
         {
-          "command": "docspace.newMarkdown",
-          "when": "view == docspace.explorer && viewItem == dsCat_all",
-          "group": "docspace@1"
-        },
-        {
-          "command": "docspace.newMermaid",
-          "when": "view == docspace.explorer && viewItem == dsCat_all",
-          "group": "docspace@2"
-        },
-        {
-          "command": "docspace.newExcalidraw",
-          "when": "view == docspace.explorer && viewItem == dsCat_all",
-          "group": "docspace@3"
-        },
-        {
           "command": "docspace.deleteFile",
-          "when": "view == docspace.explorer && viewItem =~ /dsFile|dsFolder/",
+          "when": "view == docspace.explorer && viewItem =~ /^(dsFile|dsFolder)$/",
           "group": "inline"
         },
         {
           "command": "docspace.renameFile",
-          "when": "view == docspace.explorer && viewItem =~ /dsFile|dsFolder/",
+          "when": "view == docspace.explorer && viewItem =~ /^(dsFile|dsFolder)$/",
           "group": "docspace@8"
         }
       ],
@@ -131,7 +121,7 @@
           "group": "navigation@1"
         },
         {
-          "command": "docspace.selectRootFolder",
+          "command": "docspace.regenerateDoc",
           "when": "view == docspace.explorer",
           "group": "navigation@2"
         },
@@ -139,34 +129,56 @@
           "command": "docspace.selectDiagramTheme",
           "when": "view == docspace.explorer",
           "group": "navigation@3"
-        },
-        {
-          "command": "docspace.selectMode",
-          "when": "view == docspace.explorer",
-          "group": "navigation@4"
         }
       ]
     },
     "configuration": {
       "title": "Docspace",
       "properties": {
-        "docspace.mode": {
+        "docspace.docsMode": {
           "type": "string",
-          "enum": [
-            "auto",
-            "folder"
-          ],
+          "enum": ["auto", "folder"],
           "enumDescriptions": [
-            "Descobre arquivos .md, .mmd e blocos Mermaid em todo o workspace.",
-            "Usa a pasta definida em docspace.rootFolder (.docspace por padrão) como fonte."
+            "Descobre arquivos .md (e .md com Mermaid) em todo o projeto.",
+            "Mostra apenas os arquivos da pasta definida em docspace.docsFolder."
           ],
           "default": "auto",
-          "description": "Modo de descoberta de arquivos do Docspace."
+          "description": "Modo de descoberta da categoria Docs."
         },
-        "docspace.rootFolder": {
+        "docspace.docsFolder": {
           "type": "string",
-          "default": ".docspace",
-          "description": "Pasta raiz usada no modo 'folder'. Aceita um caminho relativo à raiz do workspace ou um caminho absoluto para qualquer pasta do computador."
+          "default": "",
+          "description": "Pasta usada pela categoria Docs no modo 'folder'. Caminho relativo ao workspace ou absoluto."
+        },
+        "docspace.diagramsMode": {
+          "type": "string",
+          "enum": ["auto", "folder"],
+          "enumDescriptions": [
+            "Descobre arquivos .mmd e .md com blocos Mermaid em todo o projeto.",
+            "Mostra apenas os arquivos da pasta definida em docspace.diagramsFolder."
+          ],
+          "default": "auto",
+          "description": "Modo de descoberta da categoria Diagrams."
+        },
+        "docspace.diagramsFolder": {
+          "type": "string",
+          "default": "",
+          "description": "Pasta usada pela categoria Diagrams no modo 'folder'. Caminho relativo ao workspace ou absoluto."
+        },
+        "docspace.canvasMode": {
+          "type": "string",
+          "enum": ["auto", "folder"],
+          "enumDescriptions": [
+            "Descobre arquivos .excalidraw em todo o projeto.",
+            "Mostra apenas os arquivos da pasta definida em docspace.canvasFolder."
+          ],
+          "default": "auto",
+          "description": "Modo de descoberta da categoria Canvas."
+        },
+        "docspace.canvasFolder": {
+          "type": "string",
+          "default": "",
+          "description": "Pasta usada pela categoria Canvas no modo 'folder'. Caminho relativo ao workspace ou absoluto."
         },
         "docspace.diagramTheme": {
           "type": "string",
@@ -188,6 +200,25 @@
           ],
           "default": "auto",
           "description": "Tema dos diagramas Mermaid no preview."
+        },
+        "docspace.graphTheme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "obsidian",
+            "blueprint",
+            "pastel",
+            "high-contrast"
+          ],
+          "enumDescriptions": [
+            "Segue o tema do VS Code.",
+            "Fundo escuro, nós coloridos com tons suaves.",
+            "Fundo azul escuro, nós e edges em azul claro/branco.",
+            "Fundo claro, nós em cores pastel suaves.",
+            "Fundo preto, cores vibrantes, máximo contraste."
+          ],
+          "default": "auto",
+          "description": "Tema visual do Project Graph."
         },
         "docspace.exclude": {
           "type": "array",
@@ -232,7 +263,7 @@
     "viewsWelcome": [
       {
         "view": "docspace.explorer",
-        "contents": "Nenhum documento encontrado nesta pasta.\n[Escolher pasta](command:docspace.selectRootFolder)\n[Novo Markdown](command:docspace.newMarkdown)"
+        "contents": "Nenhum documento encontrado.\n[Novo Markdown](command:docspace.newMarkdown)"
       }
     ]
   },

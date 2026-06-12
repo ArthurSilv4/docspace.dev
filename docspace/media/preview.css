@@ -170,6 +170,33 @@ body {
 
 .mermaid-container:hover .diagram-reset { opacity: 1; }
 
+/* ── Embedded references: ![[x.mmd]] / ![[x.excalidraw]] ─────────────────── */
+.excalidraw-embed {
+  margin: 1.5em 0;
+  padding: 1rem;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background: var(--vscode-editor-background);
+  overflow: auto;
+}
+
+.excalidraw-embed svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.embed-missing {
+  color: var(--vscode-editorWarning-foreground, #cca700);
+  border: 1px dashed var(--vscode-panel-border);
+  padding: 0.5em 1em;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.85em;
+  margin: 0.5em 0;
+}
+
 .mermaid-error {
   color: var(--vscode-errorForeground);
   background: var(--vscode-inputValidation-errorBackground);

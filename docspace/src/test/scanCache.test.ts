@@ -42,17 +42,17 @@ suite('scanCache', () => {
 	});
 
 	test('invalidating a folder clears its descendants', () => {
-		setCachedRelevance('all', uri('a'), true);
-		setCachedRelevance('all', uri('a', 'b'), true);
+		setCachedRelevance('docs', uri('a'), true);
+		setCachedRelevance('docs', uri('a', 'b'), true);
 		setCachedMermaid(uri('a', 'b', 'doc.md'), true);
-		setCachedRelevance('all', uri('ab'), true); // prefix overlap, not a child
+		setCachedRelevance('docs', uri('ab'), true); // prefix overlap, not a child
 
 		invalidatePath(uri('a'));
 
-		assert.strictEqual(getCachedRelevance('all', uri('a')), undefined);
-		assert.strictEqual(getCachedRelevance('all', uri('a', 'b')), undefined);
+		assert.strictEqual(getCachedRelevance('docs', uri('a')), undefined);
+		assert.strictEqual(getCachedRelevance('docs', uri('a', 'b')), undefined);
 		assert.strictEqual(getCachedMermaid(uri('a', 'b', 'doc.md')), undefined);
-		assert.strictEqual(getCachedRelevance('all', uri('ab')), true, 'path-prefix lookalikes stay cached');
+		assert.strictEqual(getCachedRelevance('docs', uri('ab')), true, 'path-prefix lookalikes stay cached');
 	});
 
 	test('invalidating a file clears its mermaid entry only', () => {

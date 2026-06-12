@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { extractImports, packageName, resolveImport } from '../projectGraph.js';
+import { detectRole, extractImports, isTestFile, packageName, resolveImport } from '../projectGraph.js';
 
 suite('projectGraph', () => {
 	test('extracts the common import forms', () => {
@@ -88,5 +88,25 @@ suite('projectGraph', () => {
 		assert.strictEqual(packageName('lodash/fp'), 'lodash');
 		assert.strictEqual(packageName('@scope/pkg'), '@scope/pkg');
 		assert.strictEqual(packageName('@scope/pkg/deep/path'), '@scope/pkg');
+	});
+
+	test('detects architectural roles from file paths', () => {
+		assert.strictEqual(detectRole('src/main.ts'), 'entry');
+		assert.strictEqual(detectRole('src/extension.ts'), 'entry');
+		assert.strictEqual(detectRole('src/api/userController.ts'), 'controller');
+		assert.strictEqual(detectRole('src/services/authService.cs'), 'service');
+		assert.strictEqual(detectRole('src/data/userRepository.py'), 'repository');
+		assert.strictEqual(detectRole('src/models/user.entity.ts'), 'model');
+		assert.strictEqual(detectRole('src/utils/format.ts'), 'util');
+		assert.strictEqual(detectRole('src/randomFile.ts'), 'other');
+	});
+
+	test('detects test files by suffix and folder', () => {
+		assert.strictEqual(isTestFile('src/a.test.ts'), true);
+		assert.strictEqual(isTestFile('src/a.spec.js'), true);
+		assert.strictEqual(isTestFile('tests/helpers.py'), true);
+		assert.strictEqual(isTestFile('src/__tests__/x.ts'), true);
+		assert.strictEqual(isTestFile('src/testimony.ts'), false);
+		assert.strictEqual(isTestFile('src/app.ts'), false);
 	});
 });

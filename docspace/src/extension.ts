@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { DocspaceProvider } from './provider.js';
-import { getConfig, resolveRootUri, workspaceRoot } from './config.js';
-import { scaffoldFolderStructure } from './folderMode.js';
+import { CategoryKey, configTarget, getCategoryConfig, resolveCategoryRoot, workspaceRoot } from './config.js';
+import { generateProjectDocs } from './docGenerator.js';
 import { PreviewPanel } from './previewPanel.js';
 import { GraphPanel } from './graphPanel.js';
 import { CanvasEditorProvider } from './canvasEditor.js';
@@ -10,6 +10,10 @@ import { WorkspaceTreeItem } from './treeItem.js';
 
 const RELEVANT_FILE = /\.(md|mmd|excalidraw)$/i;
 const RELEVANT_GLOB = '**/*.{md,mmd,excalidraw}';
+const CATEGORY_KEYS: CategoryKey[] = ['docs', 'diagrams', 'canvas'];
+const CATEGORY_LABELS: Record<CategoryKey, string> = {
+	docs: 'Docs', diagrams: 'Diagrams', canvas: 'Canvas',
+};
 
 /** Let the user pick the destination folder when no tree folder gave context. */
 async function pickTargetFolder(): Promise<vscode.Uri | undefined> {
@@ -19,9 +23,18 @@ async function pickTargetFolder(): Promise<vscode.Uri | undefined> {
 		canSelectMany: false,
 		openLabel: 'Salvar aqui',
 		title: 'Docspace — onde salvar o arquivo?',
-		defaultUri: resolveRootUri() ?? workspaceRoot(),
+		defaultUri: workspaceRoot(),
 	});
 	return picked?.[0];
+}
+
+/** Category in folder mode creates files in its folder; otherwise ask. */
+async function targetFolderFor(item: WorkspaceTreeItem | undefined): Promise<vscode.Uri | undefined> {
+	if (item?.uri) { return item.uri; }
+	if (item?.kind === 'category' && item.filterKey && getCategoryConfig(item.filterKey).mode === 'folder') {
+		return resolveCategoryRoot(item.filterKey);
+	}
+	return pickTargetFolder();
 }
 
 async function createFile(
@@ -31,7 +44,7 @@ async function createFile(
 	prompt: string,
 	onCreated: (uri: vscode.Uri) => void,
 ): Promise<void> {
-	const baseUri = item?.uri ?? await pickTargetFolder();
+	const baseUri = await targetFolderFor(item);
 	if (!baseUri) { return; }
 
 	const input = await vscode.window.showInputBox({
@@ -66,30 +79,33 @@ function invalidateIfRelevant(provider: DocspaceProvider, uris: readonly vscode.
 }
 
 /**
- * Watches the configured root folder when it lives outside the workspace
- * (absolute `docspace.rootFolder`) — the workspace-scoped watcher can't see it.
- * Re-synced whenever mode/rootFolder change.
+ * Watches category folders that live outside the workspace (absolute
+ * `docspace.<key>Folder`) — the workspace-scoped watcher can't see them.
+ * Re-synced whenever category configs change.
  */
-class ExternalRootWatcher implements vscode.Disposable {
+class ExternalRootsWatcher implements vscode.Disposable {
 	private current: vscode.Disposable[] = [];
 
 	constructor(private readonly provider: DocspaceProvider) {}
 
 	sync(): void {
 		this.dispose();
-		const root = resolveRootUri();
-		if (!root || getConfig().mode !== 'folder' || vscode.workspace.getWorkspaceFolder(root)) {
-			return;
+		const seen = new Set<string>();
+		for (const key of CATEGORY_KEYS) {
+			if (getCategoryConfig(key).mode !== 'folder') { continue; }
+			const root = resolveCategoryRoot(key);
+			if (!root || vscode.workspace.getWorkspaceFolder(root) || seen.has(root.fsPath)) { continue; }
+			seen.add(root.fsPath);
+			const watcher = vscode.workspace.createFileSystemWatcher(
+				new vscode.RelativePattern(root, RELEVANT_GLOB)
+			);
+			this.current.push(
+				watcher,
+				watcher.onDidCreate((uri) => this.provider.invalidate(uri)),
+				watcher.onDidChange((uri) => this.provider.invalidate(uri)),
+				watcher.onDidDelete((uri) => this.provider.invalidate(uri)),
+			);
 		}
-		const watcher = vscode.workspace.createFileSystemWatcher(
-			new vscode.RelativePattern(root, RELEVANT_GLOB)
-		);
-		this.current = [
-			watcher,
-			watcher.onDidCreate((uri) => this.provider.invalidate(uri)),
-			watcher.onDidChange((uri) => this.provider.invalidate(uri)),
-			watcher.onDidDelete((uri) => this.provider.invalidate(uri)),
-		];
 	}
 
 	dispose(): void {
@@ -98,10 +114,16 @@ class ExternalRootWatcher implements vscode.Disposable {
 	}
 }
 
+function affectsCategoryConfig(e: vscode.ConfigurationChangeEvent): boolean {
+	return CATEGORY_KEYS.some((key) =>
+		e.affectsConfiguration(`docspace.${key}Mode`) || e.affectsConfiguration(`docspace.${key}Folder`)
+	) || e.affectsConfiguration('docspace.exclude');
+}
+
 function registerTreeEvents(
 	context: vscode.ExtensionContext,
 	provider: DocspaceProvider,
-	externalWatcher: ExternalRootWatcher,
+	externalWatcher: ExternalRootsWatcher,
 ): void {
 	const watcher = vscode.workspace.createFileSystemWatcher(RELEVANT_GLOB);
 	context.subscriptions.push(
@@ -115,11 +137,7 @@ function registerTreeEvents(
 			invalidateIfRelevant(provider, e.files.map((f) => f.newUri));
 		}),
 		vscode.workspace.onDidChangeConfiguration((e) => {
-			if (
-				e.affectsConfiguration('docspace.mode') ||
-				e.affectsConfiguration('docspace.rootFolder') ||
-				e.affectsConfiguration('docspace.exclude')
-			) {
+			if (affectsCategoryConfig(e)) {
 				externalWatcher.sync();
 				provider.refreshAll();
 			}
@@ -138,8 +156,10 @@ function registerCommands(context: vscode.ExtensionContext, provider: DocspacePr
 			GraphPanel.createOrShow(context);
 		}),
 		vscode.commands.registerCommand('docspace.selectDiagramTheme', selectDiagramTheme),
-		vscode.commands.registerCommand('docspace.selectMode', selectMode),
-		vscode.commands.registerCommand('docspace.selectRootFolder', selectRootFolder),
+		vscode.commands.registerCommand('docspace.configureCategory', (item?: WorkspaceTreeItem) =>
+			configureCategory(item)
+		),
+		vscode.commands.registerCommand('docspace.regenerateDoc', () => regenerateDoc(provider)),
 		vscode.commands.registerCommand('docspace.newMarkdown', (item?: WorkspaceTreeItem) =>
 			createFile(item, 'md', (n) => `# ${n.replace(/\.md$/, '')}\n`, 'Markdown filename', onCreated)
 		),
@@ -153,7 +173,7 @@ function registerCommands(context: vscode.ExtensionContext, provider: DocspacePr
 			}, null, 2), 'Canvas filename', onCreated)
 		),
 		vscode.commands.registerCommand('docspace.deleteFile', async (item?: WorkspaceTreeItem) => {
-			if (!item?.uri) { return; }
+			if (!item?.uri || item.kind === 'genFile' || item.kind === 'genFolder') { return; }
 			const name = path.basename(item.uri.fsPath);
 			const confirm = await vscode.window.showWarningMessage(
 				`Delete ${name}?`, { modal: true }, 'Delete'
@@ -164,7 +184,7 @@ function registerCommands(context: vscode.ExtensionContext, provider: DocspacePr
 			}
 		}),
 		vscode.commands.registerCommand('docspace.renameFile', async (item?: WorkspaceTreeItem) => {
-			if (!item?.uri) { return; }
+			if (!item?.uri || item.kind === 'genFile' || item.kind === 'genFolder') { return; }
 			const oldUri = item.uri;
 			const oldName = path.basename(oldUri.fsPath);
 			const ext = path.extname(oldName);
@@ -201,78 +221,77 @@ async function selectDiagramTheme(): Promise<void> {
 	);
 	if (picked) {
 		await vscode.workspace.getConfiguration('docspace').update(
-			'diagramTheme', picked.value, vscode.ConfigurationTarget.Workspace
+			'diagramTheme', picked.value, configTarget()
 		);
 	}
 }
 
-function configTarget(): vscode.ConfigurationTarget {
-	return workspaceRoot() ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
-}
+/** Right-click on a category: pick its discovery mode (auto / specific folder). */
+async function configureCategory(item?: WorkspaceTreeItem): Promise<void> {
+	const key = item?.filterKey;
+	if (!key) { return; }
 
-const DEFAULT_ROOT_FOLDER = '.docspace';
-
-/** Human-readable name of the active mode, distinguishing the 3 the UI offers. */
-function currentModeLabel(): string {
-	const { mode, rootFolder } = getConfig();
-	if (mode === 'auto') { return 'Automático'; }
-	if (rootFolder === DEFAULT_ROOT_FOLDER) { return 'Pasta .docspace'; }
-	return `Pasta escolhida (${rootFolder})`;
-}
-
-async function selectMode(): Promise<void> {
+	const { mode, folder } = getCategoryConfig(key);
+	const currentLabel = mode === 'auto' ? 'Automático' : `Pasta (${folder || '—'})`;
 	const picked = await vscode.window.showQuickPick(
 		[
-			{ label: '$(search) Automático', description: 'Detecta Markdown, Mermaid e canvas em todo o projeto', value: 'auto' },
-			{ label: '$(folder) Pasta .docspace', description: 'Cria e usa a pasta .docspace na raiz do projeto', value: 'folder' },
-			{ label: '$(folder-opened) Escolher pasta…', description: 'Aponta o Docspace para qualquer pasta do computador', value: 'pick' },
+			{ label: '$(search) Automático', description: `Detecta os arquivos de ${CATEGORY_LABELS[key]} no projeto inteiro`, value: 'auto' },
+			{ label: '$(folder-opened) Escolher pasta…', description: 'Mostra apenas os arquivos de uma pasta específica', value: 'folder' },
 		],
-		{ title: 'Docspace — modo de descoberta', placeHolder: `Atual: ${currentModeLabel()}` }
+		{ title: `Docspace — categoria ${CATEGORY_LABELS[key]}`, placeHolder: `Atual: ${currentLabel}` }
 	);
 	if (!picked) { return; }
 
 	const cfg = vscode.workspace.getConfiguration('docspace');
 	if (picked.value === 'auto') {
-		await cfg.update('mode', 'auto', configTarget());
-	} else if (picked.value === 'folder') {
-		// Reset to the .docspace convention even if a custom folder was set before
-		await cfg.update('rootFolder', DEFAULT_ROOT_FOLDER, configTarget());
-		await cfg.update('mode', 'folder', configTarget());
-		await scaffoldFolderStructure();
-	} else {
-		await selectRootFolder();
+		await cfg.update(`${key}Mode`, 'auto', configTarget());
+		return;
 	}
+
+	const value = await pickCategoryFolder(key);
+	if (value === undefined) { return; }
+	await cfg.update(`${key}Folder`, value, configTarget());
+	await cfg.update(`${key}Mode`, 'folder', configTarget());
 }
 
-/**
- * Point Docspace at any folder on disk. Folders inside the workspace are
- * stored as relative paths (portable); anything else is stored absolute.
- */
-async function selectRootFolder(): Promise<void> {
+/** Folder dialog for a category; workspace-internal picks become relative paths. */
+async function pickCategoryFolder(key: CategoryKey): Promise<string | undefined> {
 	const picked = await vscode.window.showOpenDialog({
 		canSelectFiles: false,
 		canSelectFolders: true,
 		canSelectMany: false,
 		openLabel: 'Usar esta pasta',
-		title: 'Docspace — pasta de documentos',
-		defaultUri: resolveRootUri() ?? workspaceRoot(),
+		title: `Docspace — pasta da categoria ${CATEGORY_LABELS[key]}`,
+		defaultUri: resolveCategoryRoot(key) ?? workspaceRoot(),
 	});
-	if (!picked?.[0]) { return; }
+	if (!picked?.[0]) { return undefined; }
 
 	const root = workspaceRoot();
-	let value = picked[0].fsPath;
+	const value = picked[0].fsPath;
 	if (root && value.toLowerCase().startsWith(root.fsPath.toLowerCase() + path.sep)) {
-		value = path.relative(root.fsPath, value).split(path.sep).join('/');
+		return path.relative(root.fsPath, value).split(path.sep).join('/');
 	}
+	return value;
+}
 
-	const cfg = vscode.workspace.getConfiguration('docspace');
-	await cfg.update('rootFolder', value, configTarget());
-	await cfg.update('mode', 'folder', configTarget());
+async function regenerateDoc(provider: DocspaceProvider): Promise<void> {
+	try {
+		await vscode.window.withProgress(
+			{ location: vscode.ProgressLocation.Notification, title: 'Docspace: gerando documentação…' },
+			() => generateProjectDocs()
+		);
+		provider.refreshAll();
+		vscode.window.showInformationMessage('Docspace: documentação gerada em docGerada/.');
+	} catch (err) {
+		vscode.window.showErrorMessage(
+			`Docspace: falha ao gerar documentação — ${err instanceof Error ? err.message : String(err)}`
+		);
+	}
 }
 
 export function activate(context: vscode.ExtensionContext): void {
 	const provider = new DocspaceProvider();
-	const externalWatcher = new ExternalRootWatcher(provider);
+	const externalWatcher = new ExternalRootsWatcher(provider);
 	externalWatcher.sync();
 
 	context.subscriptions.push(

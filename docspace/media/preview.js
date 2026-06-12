@@ -1,16 +1,22 @@
 (function () {
+  const vscode   = acquireVsCodeApi();
   const isMmd    = window.__DOCSPACE_IS_MMD__   === true;
   const filename = window.__DOCSPACE_FILENAME__ ?? '';
   const source   = window.__DOCSPACE_SOURCE__   ?? '';
+  let embeds     = window.__DOCSPACE_EMBEDS__   ?? {};
 
   function escapeHtml(text) {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  function escapeAttr(text) {
+    return escapeHtml(text).replace(/"/g, '&quot;');
+  }
+
   // ── Build shell ────────────────────────────────────────────────────────────
   const toolbar = document.createElement('div');
   toolbar.className = 'toolbar';
-  toolbar.innerHTML = `<span class="file-icon">${isMmd ? '⬡' : '📄'}</span><span class="file-name">${filename}</span>`;
+  toolbar.innerHTML = `<span class="file-icon">${isMmd ? '⬡' : '📄'}</span><span class="file-name">${escapeHtml(filename)}</span>`;
 
   const content = document.createElement('div');
   content.className = 'preview-content';
@@ -57,6 +63,53 @@
     }
   }
 
+  // ── Excalidraw embeds (![[file.excalidraw]]) ───────────────────────────────
+  async function renderExcalidrawEmbeds(root) {
+    const utils = window.ExcalidrawUtils;
+    for (const holder of [...root.querySelectorAll('.excalidraw-embed')]) {
+      const name = holder.dataset.name;
+      const raw = embeds[name];
+      if (raw === undefined) {
+        holder.className = 'embed-missing';
+        holder.textContent = `![[${name}]] — arquivo não encontrado`;
+        continue;
+      }
+      if (!utils) {
+        holder.className = 'embed-missing';
+        holder.textContent = `![[${name}]] — não foi possível carregar o renderizador`;
+        continue;
+      }
+      try {
+        const scene = JSON.parse(raw);
+        const svg = await utils.exportToSvg({
+          elements: scene.elements ?? [],
+          appState: { ...(scene.appState ?? {}), exportBackground: false, viewBackgroundColor: 'transparent' },
+          files: scene.files ?? {},
+        });
+        svg.removeAttribute('width');
+        svg.removeAttribute('height');
+        holder.innerHTML = '';
+        holder.appendChild(svg);
+      } catch (err) {
+        holder.className = 'embed-missing';
+        holder.textContent = `![[${name}]] — erro ao renderizar: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }
+  }
+
+  // ── Embed preprocessing: ![[x.mmd]] / ![[x.excalidraw]] → placeholders ─────
+  function expandEmbeds(text) {
+    return text.replace(/!\[\[([^[\]]+?\.(?:mmd|excalidraw))\]\]/g, (_, name) => {
+      if (name.endsWith('.mmd')) {
+        const body = embeds[name];
+        return body === undefined
+          ? `<div class="embed-missing">![[${escapeHtml(name)}]] — arquivo não encontrado</div>`
+          : `<pre class="mermaid">${escapeHtml(body)}</pre>`;
+      }
+      return `<div class="excalidraw-embed" data-name="${escapeAttr(name)}"></div>`;
+    });
+  }
+
   // ── Markdown ───────────────────────────────────────────────────────────────
   const mdIt = window.markdownit
     ? window.markdownit({ html: true, linkify: true, typographer: true })
@@ -79,7 +132,8 @@
       const esc = escapeHtml(text);
       return `<pre class="mermaid">${esc}</pre>`;
     }
-    return mdIt ? mdIt.render(text) : `<pre>${escapeHtml(text)}</pre>`;
+    const expanded = expandEmbeds(text);
+    return mdIt ? mdIt.render(expanded) : `<pre>${escapeHtml(text)}</pre>`;
   }
 
   let renderTimer;
@@ -88,14 +142,30 @@
     renderTimer = setTimeout(async () => {
       content.innerHTML = buildHtml(text);
       await renderMermaidIn(content);
+      await renderExcalidrawEmbeds(content);
     }, 80);
   }
+
+  // ── Clickable links to project files ───────────────────────────────────────
+  content.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href]');
+    if (!a) { return; }
+    const href = a.getAttribute('href') ?? '';
+    if (/^[a-z]+:\/\//i.test(href)) { return; } // external URLs: default behavior
+    if (/\.(mmd|excalidraw|md)(#.*)?$/i.test(href)) {
+      e.preventDefault();
+      vscode.postMessage({ type: 'open', href });
+    }
+  });
 
   // Initial render
   updatePreview(source);
 
   // ── Live updates from native editor ───────────────────────────────────────
   window.addEventListener('message', ({ data }) => {
-    if (data.type === 'update') { updatePreview(data.content); }
+    if (data.type === 'update') {
+      if (data.embeds) { embeds = data.embeds; }
+      updatePreview(data.content);
+    }
   });
 }());
