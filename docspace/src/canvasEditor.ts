@@ -34,9 +34,15 @@ export class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
 		};
 		webviewPanel.webview.html = this.buildHtml(webviewPanel.webview, document);
 
-		// Extension → Webview: sync external changes (e.g. git pull)
+		// Edits we apply on the webview's behalf fire onDidChangeTextDocument
+		// too; counting them keeps the webview from receiving an echo of its
+		// own drawing (updateScene mid-stroke clobbers the active tool).
+		let expectedEchoes = 0;
+
+		// Extension → Webview: sync genuinely external changes (git pull, undo in VS Code)
 		const changeListener = vscode.workspace.onDidChangeTextDocument((e) => {
 			if (e.document.uri.fsPath !== document.uri.fsPath) { return; }
+			if (expectedEchoes > 0) { expectedEchoes--; return; }
 			webviewPanel.webview.postMessage({ type: 'update', content: e.document.getText() });
 		});
 
@@ -46,13 +52,15 @@ export class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
 			webviewPanel.webview.postMessage({ type: 'theme', theme });
 		});
 
-		// Webview → Extension: apply Excalidraw changes to the document
-		const messageListener = webviewPanel.webview.onDidReceiveMessage(async (msg: { type: string; content: string }) => {
+		// Webview → Extension: apply Excalidraw changes to the document.
+		// Messages are chained so a 'save' never runs before the 'change'
+		// preceding it has been applied (flush-then-save on Ctrl+S).
+		const handleMessage = async (msg: { type: string; content?: string }): Promise<void> => {
 			if (msg.type === 'save') {
 				await document.save();
 				return;
 			}
-			if (msg.type !== 'change') { return; }
+			if (msg.type !== 'change' || msg.content === undefined) { return; }
 			if (msg.content.trim() === document.getText().trim()) { return; }
 			const edit = new vscode.WorkspaceEdit();
 			edit.replace(
@@ -60,7 +68,13 @@ export class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
 				new vscode.Range(0, 0, document.lineCount, 0),
 				msg.content,
 			);
-			await vscode.workspace.applyEdit(edit);
+			expectedEchoes++;
+			const applied = await vscode.workspace.applyEdit(edit);
+			if (!applied) { expectedEchoes--; }
+		};
+		let messageChain: Promise<void> = Promise.resolve();
+		const messageListener = webviewPanel.webview.onDidReceiveMessage((msg: { type: string; content?: string }) => {
+			messageChain = messageChain.then(() => handleMessage(msg));
 		});
 
 		webviewPanel.onDidDispose(() => {

@@ -27,31 +27,40 @@
 
   // ── Excalidraw API ref ─────────────────────────────────────────────────────
   let excalidrawAPI = null;
-  let ignoreNextChange = false;
 
-  // ── Debounce helper ────────────────────────────────────────────────────────
-  function debounce(fn, ms) {
-    let timeoutId;
-    return (...args) => { clearTimeout(timeoutId); timeoutId = setTimeout(() => fn(...args), ms); };
+  // ── Change queue: debounced while drawing, flushed synchronously on save ──
+  const CHANGE_DEBOUNCE_MS = 500;
+  let pendingContent = null;
+  let pendingTimer = null;
+
+  function buildContent(elements, appState, files) {
+    return JSON.stringify({
+      type: 'excalidraw',
+      version: 2,
+      source: 'docspace',
+      elements,
+      appState: {
+        gridSize: appState.gridSize,
+        theme: appState.theme,
+      },
+      files,
+    }, null, 2);
   }
 
-  const sendChange = debounce((elements, appState, files) => {
-    if (ignoreNextChange) { ignoreNextChange = false; return; }
-    vscode.postMessage({
-      type: 'change',
-      content: JSON.stringify({
-        type: 'excalidraw',
-        version: 2,
-        source: 'docspace',
-        elements,
-        appState: {
-          gridSize: appState.gridSize,
-          theme: appState.theme,
-        },
-        files,
-      }, null, 2),
-    });
-  }, 500);
+  function queueChange(elements, appState, files) {
+    pendingContent = buildContent(elements, appState, files);
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(flushChange, CHANGE_DEBOUNCE_MS);
+  }
+
+  /** Send the queued change now (no-op when nothing is pending). */
+  function flushChange() {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+    if (pendingContent === null) { return; }
+    vscode.postMessage({ type: 'change', content: pendingContent });
+    pendingContent = null;
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -61,19 +70,26 @@
       theme,
       UIOptions: { canvasActions: { toggleTheme: true, saveToActiveFile: false } },
       excalidrawAPI: (api) => { excalidrawAPI = api; },
-      onChange: sendChange,
+      onChange: queueChange,
     })
   );
 
-  // ── Ctrl+S: forward save to VS Code instead of Excalidraw's file picker ───
+  // ── Ctrl+S: flush pending edits, then save through VS Code ────────────────
+  // stopPropagation keeps Excalidraw's own Ctrl+S handler (file-save dialog)
+  // from firing; flushing first guarantees the save sees the latest drawing
+  // instead of racing the 500ms debounce.
   document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
+      e.stopPropagation();
+      flushChange();
       vscode.postMessage({ type: 'save' });
     }
   }, true);
 
-  // ── Receive external updates (git pull, co-edit, etc.) ────────────────────
+  // ── Receive external updates (git pull, undo from VS Code, etc.) ──────────
+  // The extension suppresses echoes of our own edits, so any 'update' here is
+  // a genuine external change and must be applied to the scene.
   window.addEventListener('message', ({ data }) => {
     if (!excalidrawAPI) { return; }
     if (data.type === 'theme') {
@@ -83,7 +99,9 @@
     if (data.type !== 'update') { return; }
     try {
       const parsed = JSON.parse(data.content || '{}');
-      ignoreNextChange = true;
+      // Drop any stale local edit — the external content is the new truth.
+      pendingContent = null;
+      clearTimeout(pendingTimer);
       excalidrawAPI.updateScene({
         elements: parsed.elements ?? [],
         appState: parsed.appState ?? {},
