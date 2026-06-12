@@ -3,7 +3,7 @@
   "displayName": "Docspace Workspace",
   "description": "Visualize and manage Markdown, Mermaid diagrams and Excalidraw canvases inside VS Code.",
   "publisher": "ArthurSilv4",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "engines": {
     "vscode": "^1.120.0"
   },
@@ -34,6 +34,32 @@
         "command": "docspace.regenerateDoc",
         "title": "Regenerar Doc",
         "icon": "$(book)"
+      },
+      {
+        "command": "docspace.selectSort",
+        "title": "Ordenar arquivos",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "docspace.notionConnect",
+        "title": "Notion: Conectar"
+      },
+      {
+        "command": "docspace.notionImport",
+        "title": "Notion: Importar páginas",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "docspace.notionPull",
+        "title": "Notion: Puxar (pull)"
+      },
+      {
+        "command": "docspace.notionPush",
+        "title": "Notion: Enviar (push)"
+      },
+      {
+        "command": "docspace.notionDisconnect",
+        "title": "Notion: Desconectar"
       },
       {
         "command": "docspace.openProjectGraph",
@@ -126,9 +152,19 @@
           "group": "navigation@2"
         },
         {
-          "command": "docspace.selectDiagramTheme",
+          "command": "docspace.notionImport",
           "when": "view == docspace.explorer",
           "group": "navigation@3"
+        },
+        {
+          "command": "docspace.selectSort",
+          "when": "view == docspace.explorer",
+          "group": "navigation@4"
+        },
+        {
+          "command": "docspace.selectDiagramTheme",
+          "when": "view == docspace.explorer",
+          "group": "navigation@5"
         }
       ]
     },
@@ -179,6 +215,29 @@
           "type": "string",
           "default": "",
           "description": "Pasta usada pela categoria Canvas no modo 'folder'. Caminho relativo ao workspace ou absoluto."
+        },
+        "docspace.notionToken": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Internal Integration Token do Notion (criado em https://www.notion.so/my-integrations). Guardado nas configurações do usuário, fora do repositório.",
+          "scope": "application"
+        },
+        "docspace.notionPollMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "description": "Intervalo (minutos) do sync automático de páginas vinculadas ao Notion. 0 desativa o polling."
+        },
+        "docspace.sortBy": {
+          "type": "string",
+          "enum": ["name", "modified", "size"],
+          "enumDescriptions": [
+            "Ordem alfabética.",
+            "Modificados mais recentemente primeiro.",
+            "Maiores primeiro."
+          ],
+          "default": "name",
+          "description": "Critério de ordenação dos arquivos na sidebar."
         },
         "docspace.diagramTheme": {
           "type": "string",

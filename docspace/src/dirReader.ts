@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { FilterKey, WorkspaceTreeItem } from './treeItem.js';
+import { getSortBy, SortBy } from './config.js';
 import { hasMermaidBlock, isFileRelevant, isRelevantByName, needsContentCheck } from './fileFilter.js';
 import { getCachedRelevance, setCachedRelevance } from './scanCache.js';
 
@@ -75,6 +76,25 @@ async function toTreeItem(
 	return undefined;
 }
 
+const byLabel = (a: WorkspaceTreeItem, b: WorkspaceTreeItem) =>
+	a.label!.toString().localeCompare(b.label!.toString());
+
+/** Sort files by the chosen key; modified/size need a stat per file. */
+async function sortFiles(files: WorkspaceTreeItem[], sortBy: SortBy): Promise<WorkspaceTreeItem[]> {
+	if (sortBy === 'name') { return files.sort(byLabel); }
+	const metric = new Map<WorkspaceTreeItem, number>();
+	await Promise.all(files.map(async (f) => {
+		let value = 0;
+		try {
+			const st = await vscode.workspace.fs.stat(f.uri!);
+			value = sortBy === 'size' ? st.size : st.mtime;
+		} catch { /* unreadable — sorts last */ }
+		metric.set(f, value);
+	}));
+	// largest/newest first, name as tiebreak
+	return files.sort((a, b) => (metric.get(b)! - metric.get(a)!) || byLabel(a, b));
+}
+
 export async function readDirChildren(
 	dirUri: vscode.Uri,
 	filterKey: FilterKey,
@@ -89,8 +109,28 @@ export async function readDirChildren(
 	const folders = items.filter((i): i is WorkspaceTreeItem => i?.kind === 'folder');
 	const files = items.filter((i): i is WorkspaceTreeItem => i?.kind === 'file');
 
-	const byLabel = (a: WorkspaceTreeItem, b: WorkspaceTreeItem) =>
-		a.label!.toString().localeCompare(b.label!.toString());
+	return [...folders.sort(byLabel), ...await sortFiles(files, getSortBy())];
+}
 
-	return [...folders.sort(byLabel), ...files.sort(byLabel)];
+/** Count files passing the category filter across the whole subtree (for badges). */
+export async function countRelevantFiles(
+	dirUri: vscode.Uri,
+	filterKey: FilterKey,
+	exclude: string[]
+): Promise<number> {
+	const entries = await safeReadDirectory(dirUri);
+
+	const fileResults = await Promise.all(
+		entries
+			.filter(([, type]) => type === vscode.FileType.File)
+			.map(([name]) => isFileRelevant(name, vscode.Uri.joinPath(dirUri, name), filterKey))
+	);
+	let count = fileResults.filter(Boolean).length;
+
+	for (const [name, type] of entries) {
+		if (type === vscode.FileType.Directory && !exclude.includes(name)) {
+			count += await countRelevantFiles(vscode.Uri.joinPath(dirUri, name), filterKey, exclude);
+		}
+	}
+	return count;
 }

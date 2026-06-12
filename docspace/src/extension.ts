@@ -6,6 +6,7 @@ import { generateProjectDocs } from './docGenerator.js';
 import { PreviewPanel } from './previewPanel.js';
 import { GraphPanel } from './graphPanel.js';
 import { CanvasEditorProvider } from './canvasEditor.js';
+import { NotionManager } from './notion.js';
 import { WorkspaceTreeItem } from './treeItem.js';
 
 const RELEVANT_FILE = /\.(md|mmd|excalidraw)$/i;
@@ -117,7 +118,7 @@ class ExternalRootsWatcher implements vscode.Disposable {
 function affectsCategoryConfig(e: vscode.ConfigurationChangeEvent): boolean {
 	return CATEGORY_KEYS.some((key) =>
 		e.affectsConfiguration(`docspace.${key}Mode`) || e.affectsConfiguration(`docspace.${key}Folder`)
-	) || e.affectsConfiguration('docspace.exclude');
+	) || e.affectsConfiguration('docspace.exclude') || e.affectsConfiguration('docspace.sortBy');
 }
 
 function registerTreeEvents(
@@ -156,10 +157,11 @@ function registerCommands(context: vscode.ExtensionContext, provider: DocspacePr
 			GraphPanel.createOrShow(context);
 		}),
 		vscode.commands.registerCommand('docspace.selectDiagramTheme', selectDiagramTheme),
+		vscode.commands.registerCommand('docspace.selectSort', selectSort),
 		vscode.commands.registerCommand('docspace.configureCategory', (item?: WorkspaceTreeItem) =>
 			configureCategory(item)
 		),
-		vscode.commands.registerCommand('docspace.regenerateDoc', () => regenerateDoc(provider)),
+		vscode.commands.registerCommand('docspace.regenerateDoc', () => regenerateDoc(context, provider)),
 		vscode.commands.registerCommand('docspace.newMarkdown', (item?: WorkspaceTreeItem) =>
 			createFile(item, 'md', (n) => `# ${n.replace(/\.md$/, '')}\n`, 'Markdown filename', onCreated)
 		),
@@ -226,6 +228,21 @@ async function selectDiagramTheme(): Promise<void> {
 	}
 }
 
+async function selectSort(): Promise<void> {
+	const current = vscode.workspace.getConfiguration('docspace').get<string>('sortBy', 'name');
+	const picked = await vscode.window.showQuickPick(
+		[
+			{ label: '$(case-sensitive) Nome', description: 'Ordem alfabética', value: 'name' },
+			{ label: '$(history) Modificação', description: 'Modificados mais recentemente primeiro', value: 'modified' },
+			{ label: '$(symbol-ruler) Tamanho', description: 'Maiores primeiro', value: 'size' },
+		],
+		{ title: 'Docspace — ordenar arquivos', placeHolder: `Atual: ${current}` }
+	);
+	if (picked) {
+		await vscode.workspace.getConfiguration('docspace').update('sortBy', picked.value, configTarget());
+	}
+}
+
 /** Right-click on a category: pick its discovery mode (auto / specific folder). */
 async function configureCategory(item?: WorkspaceTreeItem): Promise<void> {
 	const key = item?.filterKey;
@@ -274,11 +291,14 @@ async function pickCategoryFolder(key: CategoryKey): Promise<string | undefined>
 	return value;
 }
 
-async function regenerateDoc(provider: DocspaceProvider): Promise<void> {
+async function regenerateDoc(
+	context: vscode.ExtensionContext,
+	provider: DocspaceProvider,
+): Promise<void> {
 	try {
 		await vscode.window.withProgress(
 			{ location: vscode.ProgressLocation.Notification, title: 'Docspace: gerando documentação…' },
-			() => generateProjectDocs()
+			() => generateProjectDocs(context)
 		);
 		provider.refreshAll();
 		vscode.window.showInformationMessage('Docspace: documentação gerada em docGerada/.');
@@ -294,9 +314,13 @@ export function activate(context: vscode.ExtensionContext): void {
 	const externalWatcher = new ExternalRootsWatcher(provider);
 	externalWatcher.sync();
 
+	const notion = new NotionManager(context, () => provider.refreshAll());
+
 	context.subscriptions.push(
 		provider,
 		externalWatcher,
+		notion,
+		...notion.register(),
 		CanvasEditorProvider.register(context),
 		vscode.window.registerTreeDataProvider('docspace.explorer', provider),
 	);

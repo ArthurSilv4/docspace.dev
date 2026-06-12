@@ -136,13 +136,77 @@
     return mdIt ? mdIt.render(expanded) : `<pre>${escapeHtml(text)}</pre>`;
   }
 
+  // ── Table of contents (from ## / ### headings) ─────────────────────────────
+  function slugify(text) {
+    return text.toLowerCase().trim().replace(/[^\wÀ-ɏ]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
+  function addToc(root) {
+    const headings = [...root.querySelectorAll('h2, h3')];
+    if (headings.length < 3) { return; }
+    const used = new Set();
+    const nav = document.createElement('nav');
+    nav.className = 'toc';
+    const title = document.createElement('div');
+    title.className = 'toc-title';
+    title.textContent = 'Sumário';
+    nav.appendChild(title);
+    const ul = document.createElement('ul');
+    for (const h of headings) {
+      let id = slugify(h.textContent || 'secao') || 'secao';
+      const base = id;
+      let i = 1;
+      while (used.has(id)) { id = `${base}-${i++}`; }
+      used.add(id);
+      h.id = id;
+      const li = document.createElement('li');
+      if (h.tagName === 'H3') { li.className = 'toc-sub'; }
+      const a = document.createElement('a');
+      a.href = `#${id}`;
+      a.textContent = h.textContent || '';
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      li.appendChild(a);
+      ul.appendChild(li);
+    }
+    nav.appendChild(ul);
+    root.insertBefore(nav, root.firstChild);
+  }
+
+  // ── Copy button on each code block ─────────────────────────────────────────
+  function addCopyButtons(root) {
+    for (const pre of [...root.querySelectorAll('pre')]) {
+      if (pre.classList.contains('mermaid') || pre.querySelector('.copy-btn')) { continue; }
+      const code = pre.querySelector('code');
+      if (!code) { continue; }
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.textContent = 'Copiar';
+      btn.title = 'Copiar código';
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(code.textContent || '');
+          btn.textContent = 'Copiado!';
+        } catch {
+          btn.textContent = 'Falhou';
+        }
+        setTimeout(() => { btn.textContent = 'Copiar'; }, 1200);
+      });
+      pre.appendChild(btn);
+    }
+  }
+
   let renderTimer;
   async function updatePreview(text) {
     clearTimeout(renderTimer);
     renderTimer = setTimeout(async () => {
       content.innerHTML = buildHtml(text);
+      if (!isMmd) { addToc(content); }
       await renderMermaidIn(content);
       await renderExcalidrawEmbeds(content);
+      addCopyButtons(content);
     }, 80);
   }
 

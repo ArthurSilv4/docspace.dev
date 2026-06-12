@@ -14,7 +14,10 @@ export interface GraphNode {
 	};
 }
 export interface GraphEdge {
-	data: { id: string; source: string; target: string; type: GraphEdgeType; weight: number };
+	data: {
+		id: string; source: string; target: string; type: GraphEdgeType;
+		weight: number; specs: string[];
+	};
 }
 export interface ProjectGraph {
 	nodes: GraphNode[];
@@ -183,19 +186,24 @@ function ensureFolderChain(rel: string, nodes: Map<string, GraphNode>): string {
 	return id;
 }
 
-/** Add or strengthen an edge: repeated imports between a pair raise its weight. */
+/**
+ * Add or strengthen an edge: repeated imports between a pair raise its weight
+ * and record the specifier (shown in the webview's edge-detail panel).
+ */
 function upsertEdge(
 	edges: Map<string, GraphEdge>,
 	id: string,
 	source: string,
 	target: string,
 	type: GraphEdgeType,
+	spec: string,
 ): void {
 	const existing = edges.get(id);
 	if (existing) {
 		existing.data.weight += 1;
+		if (!existing.data.specs.includes(spec)) { existing.data.specs.push(spec); }
 	} else {
-		edges.set(id, { data: { id, source, target, type, weight: 1 } });
+		edges.set(id, { data: { id, source, target, type, weight: 1, specs: [spec] } });
 	}
 }
 
@@ -210,7 +218,7 @@ function addEdgeForSpec(
 	if (spec.startsWith('.')) {
 		const target = resolveImport(file, spec, fileSet);
 		if (target && target !== file) {
-			upsertEdge(edges, `e:${file}->${target}`, source, `file:${target}`, 'imports');
+			upsertEdge(edges, `e:${file}->${target}`, source, `file:${target}`, 'imports', spec);
 		}
 		return;
 	}
@@ -222,7 +230,7 @@ function addEdgeForSpec(
 	if (!nodes.has(moduleId)) {
 		nodes.set(moduleId, { data: { id: moduleId, label: pkg, type: 'module', role: 'external' } });
 	}
-	upsertEdge(edges, `e:${file}->${pkg}`, source, moduleId, 'dependsOn');
+	upsertEdge(edges, `e:${file}->${pkg}`, source, moduleId, 'dependsOn', spec);
 }
 
 interface FileEntry { rel: string; langId: string; uri: vscode.Uri; mtime: number }

@@ -3,6 +3,10 @@
 	'use strict';
 
 	const vscode = acquireVsCodeApi();
+
+	// cytoscape-svg self-registers a cy.svg() method when used
+	if (window.cytoscapeSvg) { cytoscape.use(window.cytoscapeSvg); }
+
 	const cyEl = document.getElementById('cy');
 	const lanesEl = document.getElementById('lanes');
 	const searchEl = document.getElementById('search');
@@ -20,6 +24,22 @@
 	let currentGraph = null;
 	let laneMeta = []; // [{ name, y }] for the Flow overlay
 	let baseStats = '';
+	let cyclesOn = false;     // cycle highlight toggle
+	let pathPick = null;      // first node picked for path-between-two, or null
+	let impactDepth = 0;      // 0 = todos os níveis; else cap predecessor depth
+	// Manual layout + colors persisted per workspace (round-tripped to the extension)
+	let savedState = { positions: {}, colors: {} };
+	let persistTimer = null;
+	let collapsedFolders = new Set(); // top folders aggregated into cluster nodes
+	let minimapOn = true;
+
+	const CLUSTER_MIN = 6; // a top folder needs this many files to be collapsible
+	const minimapEl = document.getElementById('minimap');
+
+	const detailEl = document.getElementById('detail');
+	const depthWrap = document.getElementById('depth-wrap');
+	const depthEl = document.getElementById('depth');
+	const depthVal = document.getElementById('depth-val');
 
 	// ── Themes ──────────────────────────────────────────────────────────────────
 	const THEMES = {
@@ -89,6 +109,7 @@
 			.filter((n) => n.data.type !== 'folder')
 			.map((n) => {
 				const deg = degree.get(n.data.id) || 0;
+				const baseColor = n.data.type === 'module' ? t.module : colorFor(topFolder(n.data.path));
 				return { data: {
 					id: n.data.id,
 					label: n.data.label,
@@ -97,11 +118,68 @@
 					role: n.data.role || (n.data.type === 'module' ? 'external' : 'other'),
 					isTest: n.data.isTest ? 1 : 0,
 					size: 9 + 24 * Math.sqrt(deg / maxDegree),
-					color: n.data.type === 'module' ? t.module : colorFor(topFolder(n.data.path)),
+					// manual paint (savedState) overrides the computed folder color
+					color: savedState.colors[n.data.id] || baseColor,
+					baseColor,
 				} };
 			});
 
 		return { nodes, edges: graph.edges.map((e) => ({ data: e.data })) };
+	}
+
+	/**
+	 * Collapse each folder in `collapsedFolders`: its file nodes become one
+	 * `cluster` node and edges are rerouted to it (self-edges dropped, parallels
+	 * merged). Returns the raw graph untouched when nothing is collapsed.
+	 */
+	function clusterGraph(graph) {
+		if (!collapsedFolders.size) { return graph; }
+		const idMap = new Map();
+		const clusters = new Map();
+		for (const n of graph.nodes) {
+			if (n.data.type !== 'file') { continue; }
+			const tf = topFolder(n.data.path);
+			if (!collapsedFolders.has(tf)) { continue; }
+			const cid = `cluster:${tf}`;
+			idMap.set(n.data.id, cid);
+			if (!clusters.has(cid)) {
+				clusters.set(cid, { data: { id: cid, label: tf, type: 'cluster', path: `${tf}/`, role: 'other', count: 0 } });
+			}
+			clusters.get(cid).data.count++;
+		}
+
+		const nodes = graph.nodes.filter((n) => !idMap.has(n.data.id));
+		for (const c of clusters.values()) {
+			c.data.label = `${c.data.path} (${c.data.count})`;
+			nodes.push(c);
+		}
+
+		const edgeMap = new Map();
+		for (const e of graph.edges) {
+			const s = idMap.get(e.data.source) || e.data.source;
+			const t = idMap.get(e.data.target) || e.data.target;
+			if (s === t) { continue; }
+			const id = `e:${s}->${t}`;
+			const ex = edgeMap.get(id);
+			if (ex) {
+				ex.data.weight += e.data.weight;
+				ex.data.specs = ex.data.specs.concat(e.data.specs || []);
+			} else {
+				edgeMap.set(id, { data: { id, source: s, target: t, type: e.data.type, weight: e.data.weight, specs: [...(e.data.specs || [])] } });
+			}
+		}
+		return { nodes, edges: [...edgeMap.values()] };
+	}
+
+	/** Top folders with enough files to be worth collapsing. */
+	function collapsibleFolders(graph) {
+		const counts = new Map();
+		for (const n of graph.nodes) {
+			if (n.data.type !== 'file') { continue; }
+			const tf = topFolder(n.data.path);
+			if (tf) { counts.set(tf, (counts.get(tf) || 0) + 1); }
+		}
+		return [...counts.entries()].filter(([, c]) => c >= CLUSTER_MIN).map(([f]) => f);
 	}
 
 	// ── Style ───────────────────────────────────────────────────────────────────
@@ -132,6 +210,17 @@
 			{ selector: 'node[type="module"]', style: {
 				'background-opacity': 0.5,
 				'text-opacity': 0.55,
+			} },
+			// Collapsed folder cluster — a chunky rounded square you tap to expand
+			{ selector: 'node[type="cluster"]', style: {
+				shape: 'round-rectangle',
+				width: 'data(size)', height: 'data(size)',
+				'background-opacity': 0.85,
+				'border-width': 2,
+				'border-color': t.fg,
+				'border-opacity': 0.4,
+				'text-opacity': 1,
+				'font-weight': 'bold',
 			} },
 			// Entry points: no one imports them — emphasized ring in every mode
 			{ selector: 'node.entry', style: {
@@ -207,6 +296,30 @@
 			} },
 			{ selector: 'edge.impact-hit', style: {
 				'line-color': t.accent, opacity: 0.8,
+			} },
+			// Circular dependencies (Detectar ciclos)
+			{ selector: 'node.cycle', style: {
+				'background-opacity': 1, 'text-opacity': 1,
+				'border-width': 2.5, 'border-color': '#f7768e',
+			} },
+			{ selector: 'edge.cycle', style: {
+				'line-color': '#f7768e', 'target-arrow-color': '#f7768e',
+				width: 2.5, opacity: 0.95, 'z-index': 10,
+			} },
+			// Shortest path between two picked files
+			{ selector: '.path-hit', style: {
+				'background-opacity': 1, 'text-opacity': 1,
+				'line-color': '#e0af68', 'target-arrow-color': '#e0af68',
+				'border-width': 2.5, 'border-color': '#e0af68',
+				width: 3, opacity: 1, 'z-index': 11,
+			} },
+			{ selector: 'node.path-end', style: {
+				'border-width': 3.5, 'border-color': '#e0af68',
+			} },
+			// Edge selected for the detail panel
+			{ selector: 'edge.edge-sel', style: {
+				'line-color': t.accent, 'target-arrow-color': t.accent,
+				width: 3, opacity: 1, 'z-index': 12,
 			} },
 			{ selector: 'node:selected', style: {
 				'border-width': 2.5, 'border-color': t.accent, 'text-opacity': 1,
@@ -402,6 +515,11 @@
 		for (const m of ['deps', 'flow', 'impact']) {
 			document.getElementById(`mode-${m}`).classList.toggle('active', m === next);
 		}
+		depthWrap.classList.toggle('hidden', next !== 'impact');
+		// leaving a mode cancels any pending analysis overlays
+		if (cyclesOn) { toggleCycles(); }
+		if (pathModeActive()) { togglePathMode(); }
+		hideDetail();
 		if (!cy) { return; }
 		clearModeClasses();
 		cy.layout(layoutOptions()).run();
@@ -419,8 +537,22 @@
 		statsEl.textContent = `Trilha de ${node.data('label')}: ${trail.nodes().length} arquivos`;
 	}
 
+	/** Recursive importers, optionally capped at `impactDepth` levels. */
+	function affectedBy(node) {
+		if (!impactDepth) { return node.predecessors(); }
+		let frontier = node;
+		let collected = cy.collection();
+		for (let d = 0; d < impactDepth; d++) {
+			const inc = frontier.incomers();
+			collected = collected.union(inc);
+			frontier = inc.nodes();
+			if (frontier.empty()) { break; }
+		}
+		return collected;
+	}
+
 	function showImpact(node) {
-		const affected = node.predecessors(); // who imports it, recursively
+		const affected = affectedBy(node);
 		const keep = affected.union(node);
 		cy.batch(() => {
 			cy.elements().removeClass('impact-src impact-hit dim');
@@ -429,7 +561,8 @@
 			affected.addClass('impact-hit');
 		});
 		const count = affected.nodes().length;
-		statsEl.textContent = `${count} arquivo${count === 1 ? '' : 's'} afetado${count === 1 ? '' : 's'} por mudança em ${node.data('label')}`;
+		const scope = impactDepth ? ` (até ${impactDepth} nível${impactDepth === 1 ? '' : 's'})` : '';
+		statsEl.textContent = `${count} arquivo${count === 1 ? '' : 's'} afetado${count === 1 ? '' : 's'} por mudança em ${node.data('label')}${scope}`;
 	}
 
 	function clearInteraction() {
@@ -467,7 +600,7 @@
 		if (cy) { cy.destroy(); }
 		cy = cytoscape({
 			container: cyEl,
-			elements: toElements(graph),
+			elements: toElements(clusterGraph(graph)),
 			style: buildStyle(),
 			layout: { name: 'null' },
 			pixelRatio: 'auto',
@@ -477,13 +610,18 @@
 
 		cy.on('tap', 'node', (ev) => {
 			const node = ev.target;
+			if (node.data('type') === 'cluster') { expandCluster(node); return; }
+			if (pathModeActive()) { handlePathPick(node); return; }
 			if (mode === 'flow') { traceTrail(node); return; }
 			if (mode === 'impact') { showImpact(node); return; }
 			openNode(node);
 		});
+		cy.on('tap', 'edge', (ev) => showEdgeDetail(ev.target));
 		cy.on('dbltap', 'node', (ev) => openNode(ev.target));
 		cy.on('tap', (ev) => {
-			if (ev.target === cy && mode !== 'deps') { clearInteraction(); }
+			if (ev.target !== cy) { return; }
+			hideDetail();
+			if (mode !== 'deps' && !pathModeActive()) { clearInteraction(); }
 		});
 		cy.on('mouseover', 'node', (ev) => {
 			cyEl.style.cursor = 'pointer';
@@ -493,11 +631,24 @@
 			cyEl.style.cursor = 'default';
 			if (mode === 'deps') { clearInteraction(); }
 		});
-		cy.on('viewport', updateLaneOverlay);
+		cy.on('viewport', () => { updateLaneOverlay(); scheduleMinimap(); });
+		// Manual layout: remember where the user drops a node (deps mode only)
+		cy.on('dragfree', 'node', (ev) => {
+			if (mode !== 'deps') { return; }
+			const n = ev.target;
+			savedState.positions[n.id()] = { x: n.position('x'), y: n.position('y') };
+			schedulePersist();
+		});
+		cy.on('position', 'node', scheduleMinimap);
+		// Right-click a node to paint it (persisted)
+		cy.on('cxttap', 'node', (ev) => { ev.originalEvent.preventDefault(); showColorMenu(ev.target, ev.renderedPosition); });
 
 		applyFilters({ relayout: false });
-		cy.layout(layoutOptions()).run();
+		const lay = cy.layout(layoutOptions());
+		lay.one('layoutstop', () => { applySavedPositions(); scheduleMinimap(); });
+		lay.run();
 		applyModeStyle();
+		scheduleMinimap();
 
 		const files = graph.nodes.filter((n) => n.data.type === 'file').length;
 		const modules = graph.nodes.filter((n) => n.data.type === 'module').length;
@@ -609,6 +760,324 @@
 		}
 	}
 
+	// ── Edge detail panel ────────────────────────────────────────────────────────
+	function showEdgeDetail(edge) {
+		cy.edges().removeClass('edge-sel');
+		edge.addClass('edge-sel');
+		const src = edge.source().data('label');
+		const tgt = edge.target().data('label');
+		const specs = edge.data('specs') || [];
+		const rows = specs.length
+			? specs.map((s) => `<li><code>${escapeHtml(s)}</code></li>`).join('')
+			: '<li><em>sem detalhe de import</em></li>';
+		detailEl.innerHTML =
+			`<div class="detail-head"><strong>${escapeHtml(src)}</strong> → <strong>${escapeHtml(tgt)}</strong>` +
+			`<button id="detail-close" title="Fechar">✕</button></div>` +
+			`<div class="detail-sub">${specs.length} import${specs.length === 1 ? '' : 's'}:</div>` +
+			`<ul class="detail-list">${rows}</ul>`;
+		detailEl.classList.remove('hidden');
+		document.getElementById('detail-close').addEventListener('click', hideDetail);
+	}
+
+	function hideDetail() {
+		detailEl.classList.add('hidden');
+		if (cy) { cy.edges().removeClass('edge-sel'); }
+	}
+
+	function escapeHtml(t) {
+		return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	}
+
+	// ── Cycle detection (Tarjan SCC over import edges) ────────────────────────────
+	function findCycleElements() {
+		const index = new Map();
+		const low = new Map();
+		const onStack = new Set();
+		const stack = [];
+		const sccs = [];
+		let idx = 0;
+		const nodes = cy.nodes('[type="file"]');
+
+		function strongconnect(v) {
+			const id = v.id();
+			index.set(id, idx);
+			low.set(id, idx);
+			idx++;
+			stack.push(v);
+			onStack.add(id);
+			v.outgoers('edge[type="imports"]').targets().forEach((w) => {
+				if (w.data('type') !== 'file') { return; }
+				const wid = w.id();
+				if (!index.has(wid)) {
+					strongconnect(w);
+					low.set(id, Math.min(low.get(id), low.get(wid)));
+				} else if (onStack.has(wid)) {
+					low.set(id, Math.min(low.get(id), index.get(wid)));
+				}
+			});
+			if (low.get(id) === index.get(id)) {
+				const comp = [];
+				let w;
+				do { w = stack.pop(); onStack.delete(w.id()); comp.push(w); } while (w.id() !== id);
+				if (comp.length > 1) { sccs.push(comp); }
+			}
+		}
+
+		nodes.forEach((v) => { if (!index.has(v.id())) { strongconnect(v); } });
+
+		let result = cy.collection();
+		for (const comp of sccs) {
+			const ids = new Set(comp.map((n) => n.id()));
+			const compNodes = cy.collection(comp);
+			result = result.union(compNodes);
+			compNodes.forEach((n) => n.outgoers('edge[type="imports"]').forEach((e) => {
+				if (ids.has(e.target().id())) { result = result.union(e); }
+			}));
+		}
+		return result;
+	}
+
+	function toggleCycles() {
+		if (!cy) { return; }
+		cyclesOn = !cyclesOn;
+		document.getElementById('cycles').classList.toggle('active', cyclesOn);
+		cy.elements().removeClass('cycle dim');
+		if (!cyclesOn) { statsEl.textContent = baseStats; return; }
+		const cycleEls = findCycleElements();
+		if (cycleEls.empty()) {
+			statsEl.textContent = 'Nenhuma dependência circular encontrada ✓';
+			cyclesOn = false;
+			document.getElementById('cycles').classList.remove('active');
+			return;
+		}
+		cy.batch(() => {
+			cy.elements().not(cycleEls).addClass('dim');
+			cycleEls.addClass('cycle');
+		});
+		const n = cycleEls.nodes().length;
+		statsEl.textContent = `${n} arquivos em dependências circulares`;
+	}
+
+	// ── Shortest path between two files ──────────────────────────────────────────
+	function togglePathMode() {
+		const btn = document.getElementById('path');
+		const active = !btn.classList.contains('active');
+		btn.classList.toggle('active', active);
+		pathPick = null;
+		cy.elements().removeClass('path-hit path-end dim');
+		statsEl.textContent = active ? 'Clique no arquivo de origem…' : baseStats;
+	}
+
+	function pathModeActive() {
+		return document.getElementById('path').classList.contains('active');
+	}
+
+	function handlePathPick(node) {
+		if (!pathPick) {
+			pathPick = node;
+			cy.elements().removeClass('path-hit path-end dim');
+			node.addClass('path-end');
+			statsEl.textContent = `Origem: ${node.data('label')} — clique no destino…`;
+			return;
+		}
+		const dijkstra = cy.elements().dijkstra({ root: pathPick, directed: true });
+		const path = dijkstra.pathTo(node);
+		cy.elements().removeClass('path-hit path-end dim');
+		if (!path || path.length <= 1) {
+			statsEl.textContent = `Sem caminho de ${pathPick.data('label')} → ${node.data('label')}`;
+		} else {
+			cy.batch(() => {
+				cy.elements().not(path).addClass('dim');
+				path.addClass('path-hit');
+				pathPick.addClass('path-end');
+				node.addClass('path-end');
+			});
+			statsEl.textContent = `${pathPick.data('label')} → ${node.data('label')}: ${path.nodes().length} passos`;
+		}
+		pathPick = null;
+	}
+
+	// ── Manual layout + colors persistence ───────────────────────────────────────
+	function schedulePersist() {
+		clearTimeout(persistTimer);
+		persistTimer = setTimeout(() => {
+			vscode.postMessage({ type: 'persistState', state: savedState });
+		}, 600);
+	}
+
+	function applySavedPositions() {
+		if (mode !== 'deps') { return; }
+		cy.batch(() => {
+			cy.nodes().forEach((n) => {
+				const p = savedState.positions[n.id()];
+				if (p) { n.position(p); }
+			});
+		});
+	}
+
+	const PAINT_COLORS = ['#f7768e', '#e0af68', '#9ece6a', '#7aa2f7', '#bb9af7', '#6b7089'];
+	const PAINT_LABELS = {
+		'#f7768e': 'não mexer', '#e0af68': 'dívida técnica', '#9ece6a': 'ok',
+		'#7aa2f7': 'revisar', '#bb9af7': 'refatorar', '#6b7089': 'neutro',
+	};
+	let colorMenuEl = null;
+
+	function closeColorMenu() {
+		if (colorMenuEl) { colorMenuEl.remove(); colorMenuEl = null; }
+	}
+
+	function paintNode(node, color) {
+		if (color) {
+			node.data('color', color);
+			savedState.colors[node.id()] = color;
+		} else {
+			node.data('color', node.data('baseColor'));
+			delete savedState.colors[node.id()];
+		}
+		schedulePersist();
+		closeColorMenu();
+	}
+
+	function showColorMenu(node, pos) {
+		closeColorMenu();
+		const menu = document.createElement('div');
+		menu.className = 'color-menu';
+		menu.style.left = `${pos.x}px`;
+		menu.style.top = `${pos.y}px`;
+		for (const c of PAINT_COLORS) {
+			const sw = document.createElement('button');
+			sw.className = 'swatch';
+			sw.style.background = c;
+			sw.title = PAINT_LABELS[c] || c;
+			sw.addEventListener('click', () => paintNode(node, c));
+			menu.appendChild(sw);
+		}
+		const clear = document.createElement('button');
+		clear.className = 'swatch-clear';
+		clear.textContent = 'remover';
+		clear.addEventListener('click', () => paintNode(node, null));
+		menu.appendChild(clear);
+		document.getElementById('graph-wrap').appendChild(menu);
+		colorMenuEl = menu;
+	}
+
+	function resetManualState() {
+		savedState = { positions: {}, colors: {} };
+		vscode.postMessage({ type: 'resetState' });
+		closeColorMenu();
+		if (currentGraph) { render(currentGraph); }
+	}
+
+	// ── Collapsible folder clusters ──────────────────────────────────────────────
+	function syncClusterButton() {
+		document.getElementById('clusters').classList.toggle('active', collapsedFolders.size > 0);
+	}
+
+	function toggleClusters() {
+		if (!cy || !currentGraph) { return; }
+		const turningOn = collapsedFolders.size === 0;
+		collapsedFolders = new Set(turningOn ? collapsibleFolders(currentGraph) : []);
+		if (turningOn && collapsedFolders.size === 0) {
+			statsEl.textContent = `Nenhuma pasta com ${CLUSTER_MIN}+ arquivos para agrupar`;
+			return;
+		}
+		syncClusterButton();
+		render(currentGraph);
+	}
+
+	function expandCluster(node) {
+		collapsedFolders.delete(node.data('path').replace(/\/$/, ''));
+		syncClusterButton();
+		render(currentGraph);
+	}
+
+	// ── Minimap ──────────────────────────────────────────────────────────────────
+	let minimapTransform = null; // { scale, offX, offY } model→canvas
+	let minimapRaf = 0;
+
+	function scheduleMinimap() {
+		if (minimapRaf) { return; }
+		minimapRaf = requestAnimationFrame(() => { minimapRaf = 0; drawMinimap(); });
+	}
+
+	function drawMinimap() {
+		const ctx = minimapEl.getContext('2d');
+		const W = minimapEl.width;
+		const H = minimapEl.height;
+		ctx.clearRect(0, 0, W, H);
+		if (!minimapOn || !cy || cy.nodes().empty()) { minimapTransform = null; return; }
+
+		const bb = cy.elements().not('.hidden').boundingBox();
+		if (!bb.w || !bb.h) { return; }
+		const pad = 8;
+		const scale = Math.min((W - 2 * pad) / bb.w, (H - 2 * pad) / bb.h);
+		const offX = pad + (W - 2 * pad - bb.w * scale) / 2 - bb.x1 * scale;
+		const offY = pad + (H - 2 * pad - bb.h * scale) / 2 - bb.y1 * scale;
+		minimapTransform = { scale, offX, offY };
+		const mx = (x) => x * scale + offX;
+		const my = (y) => y * scale + offY;
+
+		const t = theme();
+		ctx.strokeStyle = t.edge;
+		ctx.globalAlpha = 0.25;
+		ctx.lineWidth = 0.5;
+		cy.edges().not('.hidden').forEach((e) => {
+			const s = e.source().position();
+			const d = e.target().position();
+			ctx.beginPath();
+			ctx.moveTo(mx(s.x), my(s.y));
+			ctx.lineTo(mx(d.x), my(d.y));
+			ctx.stroke();
+		});
+
+		ctx.globalAlpha = 0.9;
+		cy.nodes().not('.hidden').forEach((n) => {
+			const p = n.position();
+			ctx.fillStyle = n.data('color') || t.fg;
+			ctx.beginPath();
+			ctx.arc(mx(p.x), my(p.y), n.data('type') === 'cluster' ? 3 : 1.6, 0, 2 * Math.PI);
+			ctx.fill();
+		});
+
+		// viewport rectangle
+		const ext = cy.extent();
+		ctx.globalAlpha = 1;
+		ctx.strokeStyle = t.accent;
+		ctx.lineWidth = 1;
+		ctx.strokeRect(mx(ext.x1), my(ext.y1), (ext.x2 - ext.x1) * scale, (ext.y2 - ext.y1) * scale);
+	}
+
+	function panFromMinimap(ev) {
+		if (!minimapTransform || !cy) { return; }
+		const rect = minimapEl.getBoundingClientRect();
+		const cx = ev.clientX - rect.left;
+		const cy2 = ev.clientY - rect.top;
+		const modelX = (cx - minimapTransform.offX) / minimapTransform.scale;
+		const modelY = (cy2 - minimapTransform.offY) / minimapTransform.scale;
+		const z = cy.zoom();
+		cy.pan({ x: cyEl.clientWidth / 2 - modelX * z, y: cyEl.clientHeight / 2 - modelY * z });
+	}
+
+	function toggleMinimap() {
+		minimapOn = !minimapOn;
+		minimapEl.classList.toggle('hidden', !minimapOn);
+		document.getElementById('minimap-toggle').classList.toggle('active', minimapOn);
+		if (minimapOn) { scheduleMinimap(); }
+	}
+
+	// ── Export PNG / SVG ─────────────────────────────────────────────────────────
+	function exportPng() {
+		if (!cy) { return; }
+		const data = cy.png({ full: true, scale: 2, bg: theme().bg });
+		vscode.postMessage({ type: 'exportImage', data });
+	}
+
+	function exportSvg() {
+		if (!cy || typeof cy.svg !== 'function') { return; }
+		const data = cy.svg({ full: true, scale: 1, bg: theme().bg });
+		vscode.postMessage({ type: 'exportSvg', data });
+	}
+
 	// ── Wire up ─────────────────────────────────────────────────────────────────
 	searchEl.addEventListener('input', applySearch);
 	searchEl.addEventListener('keydown', (ev) => {
@@ -632,6 +1101,27 @@
 	document.getElementById('mode-flow').addEventListener('click', () => setMode('flow'));
 	document.getElementById('mode-impact').addEventListener('click', () => setMode('impact'));
 
+	document.getElementById('cycles').addEventListener('click', toggleCycles);
+	document.getElementById('path').addEventListener('click', () => { if (cy) { togglePathMode(); } });
+	document.getElementById('export-png').addEventListener('click', exportPng);
+	document.getElementById('export-svg').addEventListener('click', exportSvg);
+	document.getElementById('reset-layout').addEventListener('click', resetManualState);
+	document.getElementById('clusters').addEventListener('click', toggleClusters);
+	document.getElementById('minimap-toggle').addEventListener('click', toggleMinimap);
+	// dismiss the color menu on any outside interaction
+	cyEl.addEventListener('mousedown', closeColorMenu);
+
+	// Minimap: click or drag to recenter the main view
+	let minimapDragging = false;
+	minimapEl.addEventListener('mousedown', (e) => { minimapDragging = true; panFromMinimap(e); });
+	window.addEventListener('mousemove', (e) => { if (minimapDragging) { panFromMinimap(e); } });
+	window.addEventListener('mouseup', () => { minimapDragging = false; });
+
+	depthEl.addEventListener('input', () => {
+		impactDepth = Number(depthEl.value);
+		depthVal.textContent = impactDepth === 0 ? 'todos' : String(impactDepth);
+	});
+
 	document.getElementById('fit').addEventListener('click', () => {
 		if (cy) { cy.animate({ fit: { padding: 50 }, duration: 250 }); }
 	});
@@ -647,6 +1137,7 @@
 		if (msg.type === 'graph') {
 			themeName = msg.theme || themeName;
 			themeSel.value = themeName;
+			savedState = msg.saved || { positions: {}, colors: {} };
 			cyEl.style.background = theme().bg;
 			lanesEl.style.color = theme().fg;
 			render(msg.graph);

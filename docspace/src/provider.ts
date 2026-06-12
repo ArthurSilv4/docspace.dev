@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkspaceTreeItem } from './treeItem.js';
 import { CategoryKey, GENERATED_DIR, generatedDirUri, getExclude, resolveCategoryRoot } from './config.js';
-import { readDirChildren, safeReadDirectory } from './dirReader.js';
+import { countRelevantFiles, readDirChildren, safeReadDirectory } from './dirReader.js';
 import { clearCaches, invalidatePath } from './scanCache.js';
 
 const REFRESH_DEBOUNCE_MS = 300;
@@ -46,8 +46,15 @@ export class DocspaceProvider implements vscode.TreeDataProvider<WorkspaceTreeIt
 
 	async getChildren(element?: WorkspaceTreeItem): Promise<WorkspaceTreeItem[]> {
 		if (!element) {
-			return CATEGORIES.map(({ key, label, icon }) =>
-				new WorkspaceTreeItem('category', label, undefined, key, icon));
+			return Promise.all(CATEGORIES.map(async ({ key, label, icon }) => {
+				const item = new WorkspaceTreeItem('category', label, undefined, key, icon);
+				const base = resolveCategoryRoot(key);
+				if (base) {
+					const count = await countRelevantFiles(base, key, this.scanExclude());
+					item.description = String(count); // badge, e.g. "Docs  12"
+				}
+				return item;
+			}));
 		}
 		if (element.kind === 'category' && element.filterKey) {
 			return this.categoryChildren(element.filterKey);
@@ -94,10 +101,11 @@ async function generatedFolderNode(): Promise<WorkspaceTreeItem | undefined> {
 
 async function generatedFiles(dirUri: vscode.Uri): Promise<WorkspaceTreeItem[]> {
 	const entries = await safeReadDirectory(dirUri);
-	return entries
+	const names = entries
 		.filter(([name, type]) => type === vscode.FileType.File && name.endsWith('.md'))
 		.map(([name]) => name)
-		.sort()
-		.map((name) =>
-			new WorkspaceTreeItem('genFile', name, vscode.Uri.joinPath(dirUri, name), 'docs', 'lock'));
+		// index.md is the entry point — keep it pinned on top, rest alphabetical
+		.sort((a, b) => (a === 'index.md' ? -1 : b === 'index.md' ? 1 : a.localeCompare(b)));
+	return names.map((name) =>
+		new WorkspaceTreeItem('genFile', name, vscode.Uri.joinPath(dirUri, name), 'docs', 'lock'));
 }

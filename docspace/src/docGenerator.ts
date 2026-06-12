@@ -135,11 +135,82 @@ function renderFlow(file: string, outgoing: Map<string, string[]>, seen: Set<str
 	return out;
 }
 
+// ── Structural snapshot + diff (no AI — pure data comparison) ─────────────────
+interface Snapshot { files: string[]; couplings: string[] }
+interface StructuralDiff {
+	addedFiles: string[]; removedFiles: string[];
+	addedCouplings: string[]; removedCouplings: string[];
+}
+
+function buildSnapshot(graph: ProjectGraph): Snapshot {
+	const files = fileNodes(graph).map((n) => n.data.path ?? n.data.label).sort();
+	const couplings = importEdges(graph)
+		.map((e) => `${e.data.source.replace(/^file:/, '')} → ${e.data.target.replace(/^file:/, '')}`)
+		.sort();
+	return { files, couplings };
+}
+
+function diffSnapshots(prev: Snapshot | undefined, curr: Snapshot): StructuralDiff | undefined {
+	if (!prev) { return undefined; }
+	const minus = (a: string[], b: string[]) => { const s = new Set(b); return a.filter((x) => !s.has(x)); };
+	return {
+		addedFiles: minus(curr.files, prev.files),
+		removedFiles: minus(prev.files, curr.files),
+		addedCouplings: minus(curr.couplings, prev.couplings),
+		removedCouplings: minus(prev.couplings, curr.couplings),
+	};
+}
+
+const GENERATED_FILES = ['estrutura.md', 'dependencias.md', 'acoplamento.md', 'fluxos.md'];
+const GENERATED_TITLES: Record<string, string> = {
+	'estrutura.md': 'Estrutura de camadas e arquivos',
+	'dependencias.md': 'Dependências por arquivo',
+	'acoplamento.md': 'Ranking de acoplamento',
+	'fluxos.md': 'Caminhos de execução',
+};
+
+function diffSection(diff: StructuralDiff | undefined): string {
+	if (!diff) { return '## Diff estrutural\n\n_Primeira geração — sem base de comparação._\n\n'; }
+	const unchanged = !diff.addedFiles.length && !diff.removedFiles.length
+		&& !diff.addedCouplings.length && !diff.removedCouplings.length;
+	if (unchanged) { return '## Diff estrutural\n\n_Nada mudou desde a última geração._\n\n'; }
+
+	let out = '## Diff estrutural desde a última geração\n\n';
+	const block = (title: string, items: string[], icon: string) => {
+		if (!items.length) { return ''; }
+		let s = `### ${title} (${items.length})\n\n`;
+		for (const i of items) { s += `- ${icon} \`${i}\`\n`; }
+		return s + '\n';
+	};
+	out += block('Arquivos adicionados', diff.addedFiles, '➕');
+	out += block('Arquivos removidos', diff.removedFiles, '➖');
+	out += block('Acoplamentos novos', diff.addedCouplings, '🔗');
+	out += block('Acoplamentos removidos', diff.removedCouplings, '✂️');
+	return out;
+}
+
+function buildIndex(graph: ProjectGraph, diff: StructuralDiff | undefined): string {
+	let out = header('Documentação Gerada');
+	out += `${fileNodes(graph).length} arquivos · ${importEdges(graph).length} dependências internas mapeadas.\n\n`;
+	out += '## Documentos\n\n';
+	for (const name of GENERATED_FILES) {
+		out += `- [${GENERATED_TITLES[name]}](./${name})\n`;
+	}
+	out += '\n' + diffSection(diff);
+	return out;
+}
+
+function snapshotKey(root: vscode.Uri): string {
+	return `docspace.snapshot:${root.fsPath}`;
+}
+
 /**
  * Build the project graph and write the read-only generated docs into
- * `docGerada/` at the workspace root. Returns the folder URI.
+ * `docGerada/` at the workspace root. Compares against the previous run's
+ * snapshot (persisted in globalState) to emit a structural diff. Returns the
+ * folder URI.
  */
-export async function generateProjectDocs(): Promise<vscode.Uri> {
+export async function generateProjectDocs(context: vscode.ExtensionContext): Promise<vscode.Uri> {
 	const root = workspaceRoot();
 	if (!root) { throw new Error('Nenhum workspace aberto.'); }
 
@@ -147,7 +218,12 @@ export async function generateProjectDocs(): Promise<vscode.Uri> {
 	const dir = vscode.Uri.joinPath(root, GENERATED_DIR);
 	await vscode.workspace.fs.createDirectory(dir);
 
+	const prev = context.globalState.get<Snapshot>(snapshotKey(root));
+	const curr = buildSnapshot(graph);
+	const diff = diffSnapshots(prev, curr);
+
 	const docs: Array<[string, string]> = [
+		['index.md', buildIndex(graph, diff)],
 		['estrutura.md', buildEstrutura(graph)],
 		['dependencias.md', buildDependencias(graph)],
 		['acoplamento.md', buildAcoplamento(graph)],
@@ -156,5 +232,7 @@ export async function generateProjectDocs(): Promise<vscode.Uri> {
 	for (const [name, content] of docs) {
 		await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(dir, name), Buffer.from(content, 'utf8'));
 	}
+
+	await context.globalState.update(snapshotKey(root), curr);
 	return dir;
 }

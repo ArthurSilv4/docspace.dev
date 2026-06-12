@@ -17,6 +17,13 @@ export function getExclude(): string[] {
 		.get<string[]>('exclude', ['node_modules', '.git', 'out', 'dist']);
 }
 
+export type SortBy = 'name' | 'modified' | 'size';
+
+export function getSortBy(): SortBy {
+	const raw = vscode.workspace.getConfiguration('docspace').get<string>('sortBy', 'name');
+	return raw === 'modified' || raw === 'size' ? raw : 'name';
+}
+
 /** Each sidebar category (Docs/Diagrams/Canvas) has its own mode + folder. */
 export function getCategoryConfig(key: CategoryKey): CategoryConfig {
 	const cfg = vscode.workspace.getConfiguration('docspace');

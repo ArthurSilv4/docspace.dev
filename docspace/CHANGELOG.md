@@ -2,6 +2,31 @@
 
 All notable changes to the "docspace" extension will be documented in this file.
 
+## [0.0.6]
+
+### Adicionado — Integração com Notion (token manual)
+- **Conectar**: cola o Internal Integration Token nas configurações (escopo de usuário, fora do repositório); validado via `GET /v1/users/me`.
+- **Importar**: busca páginas acessíveis, seleção múltipla, converte blocos → Markdown e salva `.md` na pasta escolhida; vincula o arquivo à página.
+- **Pull/Push**: puxar atualiza o `.md` local; enviar converte o Markdown de volta em blocos e substitui o conteúdo da página.
+- **Sync automático**: polling configurável (padrão 5 min) detecta mudanças no Notion e puxa; em conflito (edições locais + mudança remota) oferece "Ver diff" / "Sobrescrever".
+- **Badge**: arquivos vinculados ganham um selo "N" na sidebar.
+- Cliente HTTP sobre `https` nativo — sem dependências externas. Conversão bloco↔markdown coberta por testes.
+
+## [0.0.5]
+
+### Adicionado
+- **docGerada/**: `index.md` com links + diff estrutural desde a última geração (arquivos e acoplamentos adicionados/removidos, sem IA).
+- **Preview**: sumário automático (TOC) clicável para `.md` longos; botão "Copiar" em cada bloco de código.
+- **Sidebar**: badge de contagem por categoria; ordenação por nome/modificação/tamanho.
+- **Grafo — análise**: detecção de dependências circulares (botão Ciclos), caminho entre dois arquivos (botão Path), slider de profundidade no modo Impacto, painel de detalhe do edge (quais imports criam a dependência).
+- **Grafo — export**: exportar como PNG e SVG.
+- **Grafo — persistência**: arrastar nós salva a posição entre sessões; clique direito num nó abre paleta para pintá-lo (ex: "não mexer", "dívida técnica"); botão Reset limpa posições e cores manuais.
+- **Grafo — clusters**: botão agrupa pastas com 6+ arquivos num único nó colapsável (clique no cluster para expandir).
+- **Grafo — minimap**: minimapa no canto com retângulo de viewport; clique/arraste para reposicionar a vista.
+
+### Pendente
+- Integração com Notion (via token manual). É a única seção do spec ainda não implementada — o grafo está completo.
+
 ## [0.0.4]
 
 ### Arquivos e edição
