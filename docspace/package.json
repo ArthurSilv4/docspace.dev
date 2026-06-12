@@ -3,7 +3,7 @@
   "displayName": "Docspace Workspace",
   "description": "Visualize and manage Markdown, Mermaid diagrams and Excalidraw canvases inside VS Code.",
   "publisher": "ArthurSilv4",
-  "version": "0.0.6",
+  "version": "0.0.4",
   "engines": {
     "vscode": "^1.120.0"
   },
