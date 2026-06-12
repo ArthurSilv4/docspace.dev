@@ -79,7 +79,7 @@
       const esc = escapeHtml(text);
       return `<pre class="mermaid">${esc}</pre>`;
     }
-    return mdIt ? mdIt.render(text) : `<pre>${text}</pre>`;
+    return mdIt ? mdIt.render(text) : `<pre>${escapeHtml(text)}</pre>`;
   }
 
   let renderTimer;

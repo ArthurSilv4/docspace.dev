@@ -88,6 +88,19 @@ export function packageName(spec: string): string {
 	return spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }
 
+// ── Cache layer 1: per-file import cache, validated by mtime ──────────────────
+interface ImportCacheEntry { mtime: number; imports: string[]; langId: string }
+const fileImportCache = new Map<string, ImportCacheEntry>();
+
+// ── Cache layer 2: full graph cache, keyed by sorted fsPath:mtime fingerprint ─
+let graphCache: { key: string; graph: ProjectGraph } | null = null;
+
+/** Drop cache entries for `uri` and invalidate the full graph cache. */
+export function invalidateGraphFile(uri: vscode.Uri): void {
+	fileImportCache.delete(uri.fsPath);
+	graphCache = null;
+}
+
 /** Fast extension → languageId map; avoids opening documents for common cases. */
 const EXT_LANG: Record<string, string> = {
 	'.ts': 'typescript',   '.tsx': 'typescriptreact',
@@ -178,13 +191,52 @@ function addEdgeForSpec(
 	}
 }
 
+interface FileEntry { rel: string; langId: string; uri: vscode.Uri; mtime: number }
+
+/** Layer 1 cache: return cached imports for a file or read + parse + cache. */
+async function resolveImportsForFile({ rel, langId, uri, mtime }: FileEntry): Promise<string[]> {
+	const cached = mtime >= 0 ? fileImportCache.get(uri.fsPath) : undefined;
+	if (cached && cached.mtime === mtime) { return cached.imports; }
+	let text: string;
+	try {
+		text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+	} catch {
+		return [];
+	}
+	const imports = extractImports(text, langId);
+	if (mtime >= 0) { fileImportCache.set(uri.fsPath, { mtime, imports, langId }); }
+	return imports;
+}
+
 /**
  * Build the project graph: code files (and their folder chain as compound
  * parents), plus `imports` edges between project files and `dependsOn`
  * edges to external packages.
+ *
+ * Two cache layers avoid redundant work on repeated calls:
+ *   Layer 1 — per-file import cache validated by mtime (skips re-parsing unchanged files).
+ *   Layer 2 — full graph cache keyed by all fsPath:mtime pairs (returns instantly when nothing changed).
  */
 export async function buildProjectGraph(rootUri: vscode.Uri, exclude: string[]): Promise<ProjectGraph> {
-	const fileEntries = await collectCodeFiles(rootUri, exclude);
+	const collected = await collectCodeFiles(rootUri, exclude);
+
+	// Stat all files once — feeds both cache layers
+	const fileEntries = await Promise.all(
+		collected.map(async ({ rel, langId }) => {
+			const uri = vscode.Uri.joinPath(rootUri, rel);
+			let mtime = -1;
+			try { mtime = (await vscode.workspace.fs.stat(uri)).mtime; } catch { /* keep -1 */ }
+			return { rel, langId, uri, mtime };
+		})
+	);
+
+	// Layer 2: if every file's mtime matches, return the cached graph immediately
+	const cacheKey = fileEntries
+		.map(({ uri, mtime }) => `${uri.fsPath}:${mtime}`)
+		.sort()
+		.join('|');
+	if (graphCache?.key === cacheKey) { return graphCache.graph; }
+
 	const files = fileEntries.map((e) => e.rel);
 	const fileSet = new Set(files);
 	const nodes = new Map<string, GraphNode>();
@@ -199,18 +251,14 @@ export async function buildProjectGraph(rootUri: vscode.Uri, exclude: string[]):
 		});
 	}
 
-	for (const { rel: file, langId } of fileEntries) {
-		let text: string;
-		try {
-			const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(rootUri, file));
-			text = Buffer.from(bytes).toString('utf8');
-		} catch { /* unreadable file */
-			continue;
-		}
-		for (const spec of extractImports(text, langId)) {
-			addEdgeForSpec(file, spec, fileSet, nodes, edges, edgeIds);
+	for (const entry of fileEntries) {
+		const imports = await resolveImportsForFile(entry);
+		for (const spec of imports) {
+			addEdgeForSpec(entry.rel, spec, fileSet, nodes, edges, edgeIds);
 		}
 	}
 
-	return { nodes: [...nodes.values()], edges };
+	const graph: ProjectGraph = { nodes: [...nodes.values()], edges };
+	graphCache = { key: cacheKey, graph };
+	return graph;
 }

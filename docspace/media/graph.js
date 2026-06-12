@@ -67,6 +67,7 @@
 
 	function buildStyle() {
 		const fg = cssVar('--vscode-descriptionForeground', '#9a9fb0');
+		const fgFull = cssVar('--vscode-foreground', '#cdd6f4');
 		const accent = cssVar('--vscode-focusBorder', '#7aa2f7');
 		const edge = cssVar('--vscode-editorLineNumber-foreground', '#4a4f63');
 		return [
@@ -91,6 +92,32 @@
 				'background-opacity': 0.5,
 				'text-opacity': 0.55,
 			} },
+			// ── Flow mode node styles ──────────────────────────────────────────────
+			{ selector: 'node.flow-node', style: {
+				shape: 'round-rectangle',
+				width: 'label',
+				height: 28,
+				padding: '0 12px',
+				'background-color': 'data(color)',
+				'background-opacity': 0.18,
+				'border-width': 1.5,
+				'border-color': 'data(color)',
+				'border-opacity': 0.85,
+				label: 'data(label)',
+				color: fgFull,
+				'font-size': 11,
+				'text-valign': 'center',
+				'text-halign': 'center',
+				'text-opacity': 1,
+				'min-zoomed-font-size': 7,
+			} },
+			{ selector: 'node.flow-node[type="module"]', style: {
+				'background-opacity': 0.08,
+				'border-style': 'dashed',
+				color: cssVar('--vscode-descriptionForeground', '#6b7089'),
+				'font-size': 10,
+			} },
+			// ── Edges ─────────────────────────────────────────────────────────────
 			{ selector: 'edge', style: {
 				width: 1,
 				'curve-style': 'haystack', 'haystack-radius': 0,
@@ -104,10 +131,13 @@
 			{ selector: 'edge.flow', style: {
 				'curve-style': 'bezier',
 				'target-arrow-shape': 'triangle',
-				'target-arrow-color': cssVar('--vscode-editorLineNumber-foreground', '#4a4f63'),
-				'arrow-scale': 0.7,
-				opacity: 0.45,
+				'target-arrow-color': edge,
+				'line-color': edge,
+				'arrow-scale': 0.8,
+				width: 1.5,
+				opacity: 0.55,
 			} },
+			// ── Selection and focus ───────────────────────────────────────────────
 			{ selector: 'node:selected', style: {
 				'border-width': 2.5, 'border-color': accent, 'text-opacity': 1,
 			} },
@@ -125,8 +155,9 @@
 		if (layoutMode === 'flow') {
 			// importer above imported: read the system top→down like a narrative
 			return typeof window.cytoscapeDagre !== 'undefined'
-				? { name: 'dagre', rankDir: 'TB', nodeSep: 30, rankSep: 90, padding: 50,
-					animate: true, animationDuration: 400 }
+				? { name: 'dagre', rankDir: 'TB', ranker: 'tight-tree',
+					nodeSep: 40, edgeSep: 15, rankSep: 80, padding: 60,
+					animate: true, animationDuration: 450, fit: true }
 				: { name: 'breadthfirst', directed: true, padding: 50, spacingFactor: 1.2 };
 		}
 		const fcose = typeof window.cytoscapeFcose !== 'undefined';
@@ -137,6 +168,25 @@
 			: { name: 'cose', animate: false, padding: 50, nodeRepulsion: 12000, idealEdgeLength: 80 };
 	}
 
+	/**
+	 * Apply visual mode to nodes: Network restores circular dots, Flow switches
+	 * to pill-shaped labels with root nodes highlighted. Always call this after
+	 * layout has settled so root identification reflects the visible graph.
+	 */
+	function applyModeStyle(mode) {
+		if (!cy) { return; }
+		if (mode === 'network') {
+			cy.nodes().removeClass('flow-node flow-root');
+			cy.nodes().removeStyle();
+		} else {
+			cy.nodes().removeClass('flow-root');
+			cy.nodes().not('.hidden').addClass('flow-node');
+			const roots = cy.nodes('.flow-node').filter((n) => n.indegree(false) === 0);
+			roots.addClass('flow-root');
+			roots.style({ 'background-opacity': 0.32, 'border-width': 2 });
+		}
+	}
+
 	function setLayoutMode(mode) {
 		layoutMode = mode;
 		document.getElementById('mode-network').classList.toggle('active', mode === 'network');
@@ -144,6 +194,7 @@
 		if (!cy) { return; }
 		cy.edges().toggleClass('flow', mode === 'flow');
 		cy.layout(layoutOptions()).run();
+		applyModeStyle(mode);
 	}
 
 	// ── hover: spotlight the neighborhood, fade the rest (Obsidian-style) ──
@@ -188,6 +239,8 @@
 			cyEl.style.cursor = 'default';
 			clearFocus();
 		});
+
+		applyModeStyle(layoutMode);
 
 		const files = graph.nodes.filter((n) => n.data.type === 'file').length;
 		const modules = graph.nodes.filter((n) => n.data.type === 'module').length;
@@ -235,6 +288,19 @@
 				});
 			}
 		});
+
+		// Relayout only when a filter is active — render() already laid out the
+		// full graph, and a second run here would cancel its animation.
+		if (folder || filesOnly) {
+			const visible = cy.elements().not('.hidden');
+			const filterLayout = visible.layout({ ...layoutOptions(), animate: true, animationDuration: 300 });
+			filterLayout.on('layoutstop', () => {
+				cy.animate({ fit: { eles: visible, padding: 50 }, duration: 200 });
+				if (layoutMode === 'flow') { applyModeStyle('flow'); }
+			});
+			filterLayout.run();
+		}
+
 		applySearch();
 	}
 
@@ -246,14 +312,35 @@
 			(n.data('label') || '').toLowerCase().includes(query));
 	}
 
+	let searchLayoutTimer = null;
+	let lastLayoutQuery = '';
+
+	function relayoutSearchResults() {
+		const active = cy.elements().not('.dim').not('.hidden');
+		const searchLayout = active.layout({ ...layoutOptions(), animate: true, animationDuration: 300 });
+		searchLayout.on('layoutstop', () => {
+			cy.animate({ fit: { eles: active, padding: 50 }, duration: 200 });
+		});
+		searchLayout.run();
+	}
+
 	function applySearch() {
 		if (!cy) { return; }
 		cy.elements().removeClass('dim search-hit');
 		const matches = matchingNodes();
-		if (!matches) { return; }
+		const query = searchEl.value.trim().toLowerCase();
+		if (!matches) { lastLayoutQuery = ''; clearTimeout(searchLayoutTimer); return; }
 		matches.addClass('search-hit');
 		const keep = matches.union(matches.connectedEdges());
 		cy.elements().not(keep).addClass('dim');
+
+		// Highlight is instant; the relayout waits for a typing pause and only
+		// fires when the query actually changed (clearFocus also calls us on hover).
+		if (matches.length > 0 && query !== lastLayoutQuery) {
+			lastLayoutQuery = query;
+			clearTimeout(searchLayoutTimer);
+			searchLayoutTimer = setTimeout(relayoutSearchResults, 400);
+		}
 	}
 
 	searchEl.addEventListener('input', applySearch);

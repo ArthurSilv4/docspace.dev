@@ -40,6 +40,49 @@ suite('projectGraph', () => {
 		assert.strictEqual(resolveImport('src/a.ts', './missing', files), undefined);
 	});
 
+	test('extracts C# usings and project references', () => {
+		const source = [
+			`using System.IO;`,
+			`using Microsoft.Extensions.Logging;`,
+			`<ProjectReference Include="../Lib/Lib.csproj" />`,
+		].join('\n');
+		assert.deepStrictEqual(
+			extractImports(source, 'csharp').sort(),
+			['../Lib/Lib.csproj', 'Microsoft.Extensions.Logging', 'System.IO'].sort()
+		);
+	});
+
+	test('extracts Python imports including relative ones', () => {
+		const source = [
+			`import os.path`,
+			`from collections import OrderedDict`,
+			`from .utils import helper`,
+		].join('\n');
+		assert.deepStrictEqual(
+			extractImports(source, 'python').sort(),
+			['.utils', 'collections', 'os.path'].sort()
+		);
+	});
+
+	test('extracts Go single and grouped imports', () => {
+		const source = [
+			`import "fmt"`,
+			`import (`,
+			`\t"strings"`,
+			`\t"github.com/user/pkg"`,
+			`)`,
+		].join('\n');
+		assert.deepStrictEqual(
+			extractImports(source, 'go').sort(),
+			['fmt', 'github.com/user/pkg', 'strings'].sort()
+		);
+	});
+
+	test('unknown language falls back to JS/TS patterns', () => {
+		const source = `import { x } from './x';`;
+		assert.deepStrictEqual(extractImports(source, 'rust'), ['./x']);
+	});
+
 	test('derives package names from bare specifiers', () => {
 		assert.strictEqual(packageName('lodash'), 'lodash');
 		assert.strictEqual(packageName('lodash/fp'), 'lodash');

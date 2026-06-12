@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { FilterKey } from './treeItem.js';
+import { invalidateGraphFile } from './projectGraph.js';
 
 // Discovery results are cached so tree refreshes don't rescan the workspace.
 // Entries are invalidated per-path by the file watcher (see extension.ts).
@@ -53,6 +54,8 @@ export function invalidatePath(uri: vscode.Uri): void {
 			mermaidCache.delete(file);
 		}
 	}
+
+	invalidateGraphFile(uri);
 }
 
 export function clearCaches(): void {

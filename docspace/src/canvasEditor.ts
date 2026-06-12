@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 
+// Last Excalidraw release with a UMD build — 0.18+ is ESM-only and the
+// unpinned dist/excalidraw.production.min.js URL 404s there.
+const EXCALIDRAW_VERSION = '0.17.6';
+const REACT_VERSION = '18.2.0';
+
 function resolveCanvasTheme(): string {
 	const kind = vscode.window.activeColorTheme.kind;
 	return kind === vscode.ColorThemeKind.Dark || kind === vscode.ColorThemeKind.HighContrast ? 'dark' : 'light';
@@ -99,11 +104,11 @@ export class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
   <script>
     window.__DOCSPACE_THEME__       = ${JSON.stringify(theme)};
     window.__DOCSPACE_CANVAS_DATA__ = ${JSON.stringify(initialData)};
-    window.EXCALIDRAW_ASSET_PATH    = 'https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw/dist/';
+    window.EXCALIDRAW_ASSET_PATH    = 'https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@${EXCALIDRAW_VERSION}/dist/';
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw/dist/excalidraw.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react@${REACT_VERSION}/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@${REACT_VERSION}/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@${EXCALIDRAW_VERSION}/dist/excalidraw.production.min.js"></script>
   <script src="${jsUri}"></script>
 </body>
 </html>`;
