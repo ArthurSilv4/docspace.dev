@@ -47,10 +47,16 @@ export class NotionManager implements vscode.Disposable {
 			vscode.window.registerFileDecorationProvider(this.decorations),
 			vscode.workspace.onDidChangeConfiguration((e) => {
 				if (e.affectsConfiguration('docspace.notionPollMinutes')) { this.restartPolling(); }
+				if (e.affectsConfiguration('docspace.notionToken')) { this.syncConnectedContext(); }
 			}),
 		);
+		this.syncConnectedContext();
 		this.refreshDecorations();
 		this.restartPolling();
+	}
+
+	private syncConnectedContext(): void {
+		void vscode.commands.executeCommand('setContext', 'docspace.notionConnected', !!getToken());
 	}
 
 	register(): vscode.Disposable[] {
@@ -92,7 +98,10 @@ export class NotionManager implements vscode.Disposable {
 	private client(): NotionClient | undefined {
 		const token = getToken();
 		if (!token) {
-			vscode.window.showWarningMessage('Docspace: conecte o Notion primeiro (token da integração).');
+			vscode.window.showWarningMessage(
+				'Docspace: conecte o Notion primeiro.',
+				'Conectar'
+			).then((choice) => { if (choice === 'Conectar') { void this.connect(); } });
 			return undefined;
 		}
 		return new NotionClient(token);
@@ -113,6 +122,7 @@ export class NotionManager implements vscode.Disposable {
 			await vscode.workspace.getConfiguration('docspace').update(
 				TOKEN_KEY, token.trim(), vscode.ConfigurationTarget.Global
 			);
+			this.syncConnectedContext();
 			vscode.window.showInformationMessage(`Docspace: conectado ao Notion como "${name}".`);
 			this.restartPolling();
 		} catch (err) {
@@ -127,6 +137,7 @@ export class NotionManager implements vscode.Disposable {
 		);
 		if (ok !== 'Desconectar') { return; }
 		await vscode.workspace.getConfiguration('docspace').update(TOKEN_KEY, undefined, vscode.ConfigurationTarget.Global);
+		this.syncConnectedContext();
 		await this.setLinks([]);
 		if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = undefined; }
 		vscode.window.showInformationMessage('Docspace: Notion desconectado.');
@@ -144,7 +155,16 @@ export class NotionManager implements vscode.Disposable {
 		if (query === undefined) { return; }
 
 		const pages = await withProgress('Buscando páginas…', () => client.searchPages(query));
-		if (!pages.length) { vscode.window.showInformationMessage('Nenhuma página acessível encontrada.'); return; }
+		if (!pages.length) {
+			const action = await vscode.window.showWarningMessage(
+				'Nenhuma página encontrada. No Notion, abra cada página que quer importar, clique em "…" → "Conexões" e adicione sua integração.',
+				'Como conectar páginas'
+			);
+			if (action) {
+				await vscode.env.openExternal(vscode.Uri.parse('https://www.notion.so/help/add-and-manage-connections-with-the-api#add-connections-to-pages'));
+			}
+			return;
+		}
 
 		const picks = await vscode.window.showQuickPick(
 			pages.map((p) => ({ label: pageTitle(p), description: p.id, page: p })),

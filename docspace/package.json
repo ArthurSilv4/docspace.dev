@@ -42,7 +42,8 @@
       },
       {
         "command": "docspace.notionConnect",
-        "title": "Notion: Conectar"
+        "title": "Notion: Conectar",
+        "icon": "$(plug)"
       },
       {
         "command": "docspace.notionImport",
@@ -59,7 +60,8 @@
       },
       {
         "command": "docspace.notionDisconnect",
-        "title": "Notion: Desconectar"
+        "title": "Notion: Desconectar",
+        "icon": "$(debug-disconnect)"
       },
       {
         "command": "docspace.openProjectGraph",
@@ -152,19 +154,29 @@
           "group": "navigation@2"
         },
         {
-          "command": "docspace.notionImport",
-          "when": "view == docspace.explorer",
+          "command": "docspace.notionConnect",
+          "when": "view == docspace.explorer && !docspace.notionConnected",
           "group": "navigation@3"
+        },
+        {
+          "command": "docspace.notionDisconnect",
+          "when": "view == docspace.explorer && docspace.notionConnected",
+          "group": "navigation@3"
+        },
+        {
+          "command": "docspace.notionImport",
+          "when": "view == docspace.explorer && docspace.notionConnected",
+          "group": "navigation@4"
         },
         {
           "command": "docspace.selectSort",
           "when": "view == docspace.explorer",
-          "group": "navigation@4"
+          "group": "navigation@5"
         },
         {
           "command": "docspace.selectDiagramTheme",
           "when": "view == docspace.explorer",
-          "group": "navigation@5"
+          "group": "navigation@6"
         }
       ]
     },
