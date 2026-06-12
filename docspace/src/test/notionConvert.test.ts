@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { blocksToMarkdown, markdownToBlocks, pageTitle, NotionBlock } from '../notionConvert.js';
+import { blocksToMarkdown, markdownToBlocks, pageTitle, NotionBlock } from '../notion/notionConvert.js';
 
 function rt(content: string, annotations = {}, href: string | null = null) {
 	return { plain_text: content, href, annotations };

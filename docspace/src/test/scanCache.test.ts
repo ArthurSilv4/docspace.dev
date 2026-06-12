@@ -8,7 +8,7 @@ import {
 	invalidatePath,
 	setCachedMermaid,
 	setCachedRelevance,
-} from '../scanCache.js';
+} from '../sidebar/scanCache.js';
 
 function uri(...segments: string[]): vscode.Uri {
 	return vscode.Uri.file(path.join(path.sep, 'repo', ...segments));

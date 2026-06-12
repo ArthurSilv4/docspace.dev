@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { FilterKey } from './treeItem.js';
-import { invalidateGraphFile } from './projectGraph.js';
+import { invalidateGraphFile } from '../graph/projectGraph.js';
 
 // Discovery results are cached so tree refreshes don't rescan the workspace.
 // Entries are invalidated per-path by the file watcher (see extension.ts).

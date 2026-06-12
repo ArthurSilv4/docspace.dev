@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { isRelevantByName, needsContentCheck } from '../fileFilter.js';
+import { isRelevantByName, needsContentCheck } from '../sidebar/fileFilter.js';
 
 suite('fileFilter', () => {
 	test('matches files by name per filter key', () => {

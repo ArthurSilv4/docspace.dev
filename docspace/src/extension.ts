@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { DocspaceProvider } from './provider.js';
-import { CategoryKey, configTarget, getCategoryConfig, resolveCategoryRoot, workspaceRoot } from './config.js';
-import { generateProjectDocs } from './docGenerator.js';
-import { PreviewPanel } from './previewPanel.js';
-import { GraphPanel } from './graphPanel.js';
-import { CanvasEditorProvider } from './canvasEditor.js';
-import { NotionManager } from './notion.js';
-import { WorkspaceTreeItem } from './treeItem.js';
+import { DocspaceProvider } from './sidebar/provider.js';
+import { CategoryKey, configTarget, getCategoryConfig, resolveCategoryRoot, workspaceRoot } from './sidebar/config.js';
+import { generateProjectDocs } from './graph/docGenerator.js';
+import { PreviewPanel } from './editor/previewPanel.js';
+import { GraphPanel } from './graph/graphPanel.js';
+import { CanvasEditorProvider } from './editor/canvasEditor.js';
+import { NotionManager } from './notion/notion.js';
+import { WorkspaceTreeItem } from './sidebar/treeItem.js';
 
 const RELEVANT_FILE = /\.(md|mmd|excalidraw)$/i;
 const RELEVANT_GLOB = '**/*.{md,mmd,excalidraw}';

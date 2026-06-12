@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { GENERATED_DIR, getExclude, workspaceRoot } from './config.js';
+import { GENERATED_DIR, getExclude, workspaceRoot } from '../sidebar/config.js';
 import { buildProjectGraph, GraphEdge, GraphNode, NodeRole, ProjectGraph } from './projectGraph.js';
 
 const ROLE_LABELS: Record<NodeRole, string> = {

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { workspaceRoot } from './config.js';
+import { workspaceRoot } from '../sidebar/config.js';
 import { NotionClient, NotionPage } from './notionClient.js';
 import { blocksToMarkdown, markdownToBlocks, pageTitle } from './notionConvert.js';
 

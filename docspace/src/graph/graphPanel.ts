@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { configTarget, getExclude, workspaceRoot } from './config.js';
+import { configTarget, getExclude, workspaceRoot } from '../sidebar/config.js';
 import { buildProjectGraph } from './projectGraph.js';
 
 const CYTOSCAPE_VERSION = '3.34.0';

@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { detectRole, extractImports, isTestFile, packageName, resolveImport } from '../projectGraph.js';
+import { detectRole, extractImports, isTestFile, packageName, resolveImport } from '../graph/projectGraph.js';
 
 suite('projectGraph', () => {
 	test('extracts the common import forms', () => {
