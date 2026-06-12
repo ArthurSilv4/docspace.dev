@@ -168,43 +168,42 @@ export class GraphPanel {
 </head>
 <body>
   <div class="toolbar">
-    <div class="segmented" role="group" aria-label="Graph mode">
-      <button id="mode-deps" class="active" title="Rede de imports entre arquivos">Dependências</button>
-      <button id="mode-flow" title="Camadas top→down por papel detectado">Fluxo</button>
-      <button id="mode-impact" title="Clique num arquivo e veja quem seria afetado">Impacto</button>
+    <div class="toolbar-row">
+      <div class="segmented" role="group" aria-label="Graph mode">
+        <button id="mode-deps" class="active" title="Rede de imports entre arquivos">Dependências</button>
+        <button id="mode-flow" title="Camadas top→down por papel detectado">Fluxo</button>
+        <button id="mode-impact" title="Clique num arquivo e veja quem seria afetado">Impacto</button>
+      </div>
+      <input id="search" type="search" placeholder="Buscar arquivo… (Enter aproxima)" aria-label="Search nodes">
+      <span id="stats" class="stats"></span>
+      <button id="fit" title="Ajustar à tela">Fit</button>
+      <button id="refresh" title="Reconstruir o grafo">Refresh</button>
     </div>
-    <button id="cycles" title="Detecta e destaca dependências circulares">Ciclos</button>
-    <button id="path" title="Clique em dois arquivos para ver o caminho entre eles">Path</button>
-    <label id="depth-wrap" class="depth hidden" title="Profundidade da propagação de impacto">
-      Nível <input id="depth" type="range" min="0" max="5" step="1" value="0"> <span id="depth-val">todos</span>
-    </label>
-    <input id="search" type="search" placeholder="Buscar arquivo… (Enter aproxima)" aria-label="Search nodes">
-    <select id="folder-filter" aria-label="Filter by folder">
-      <option value="">Todas as pastas</option>
-    </select>
-    <select id="type-filter" aria-label="Filter by type">
-      <option value="all">Arquivos + módulos</option>
-      <option value="files">Só arquivos</option>
-    </select>
-    <label class="check" title="Oculta arquivos .test. / .spec.">
-      <input id="hide-tests" type="checkbox"> sem testes
-    </label>
-    <select id="theme-select" aria-label="Tema do grafo" title="Tema do grafo">
-      <option value="auto">Tema: auto</option>
-      <option value="obsidian">Tema: obsidian</option>
-      <option value="blueprint">Tema: blueprint</option>
-      <option value="pastel">Tema: pastel</option>
-      <option value="high-contrast">Tema: high-contrast</option>
-    </select>
-    <button id="clusters" title="Colapsa pastas com muitos arquivos num único nó">Clusters</button>
-    <span class="spacer"></span>
-    <span id="stats" class="stats"></span>
-    <button id="minimap-toggle" class="active" title="Mostrar/ocultar o minimapa">Mapa</button>
-    <button id="reset-layout" title="Limpar posições e cores manuais salvas">Reset</button>
-    <button id="export-png" title="Exportar o grafo como PNG">PNG</button>
-    <button id="export-svg" title="Exportar o grafo como SVG">SVG</button>
-    <button id="fit" title="Ajustar à tela">Fit</button>
-    <button id="refresh" title="Reconstruir o grafo">Refresh</button>
+    <div class="toolbar-row toolbar-filters">
+      <select id="folder-filter" aria-label="Filter by folder">
+        <option value="">Todas as pastas</option>
+      </select>
+      <select id="type-filter" aria-label="Filter by type">
+        <option value="all">Arquivos + módulos</option>
+        <option value="files">Só arquivos</option>
+      </select>
+      <label class="check" title="Oculta arquivos .test. / .spec.">
+        <input id="hide-tests" type="checkbox"> sem testes
+      </label>
+      <select id="theme-select" aria-label="Tema do grafo" title="Tema do grafo">
+        <option value="auto">Tema: auto</option>
+        <option value="obsidian">Tema: obsidian</option>
+        <option value="blueprint">Tema: blueprint</option>
+        <option value="pastel">Tema: pastel</option>
+        <option value="high-contrast">Tema: high-contrast</option>
+      </select>
+      <button id="clusters" title="Colapsa pastas com muitos arquivos num único nó">Clusters</button>
+      <span class="spacer"></span>
+      <button id="minimap-toggle" class="active" title="Mostrar/ocultar o minimapa">Mapa</button>
+      <button id="reset-layout" title="Limpar posições e cores manuais salvas">Reset</button>
+      <button id="export-png" title="Exportar o grafo como PNG">PNG</button>
+      <button id="export-svg" title="Exportar o grafo como SVG">SVG</button>
+    </div>
   </div>
   <div id="graph-wrap">
     <div id="cy" role="application" aria-label="Project dependency graph"></div>

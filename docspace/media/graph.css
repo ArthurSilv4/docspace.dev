@@ -13,12 +13,22 @@ body { display: flex; flex-direction: column; }
 
 .toolbar {
 	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 6px 8px;
+	flex-direction: column;
 	border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
 	background: var(--vscode-sideBar-background, transparent);
 	flex-shrink: 0;
+}
+
+.toolbar-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 5px;
+	padding: 5px 8px;
+}
+
+.toolbar-filters {
+	border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.12));
 }
 
 .segmented {
@@ -43,7 +53,8 @@ body { display: flex; flex-direction: column; }
 .segmented button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 
 .toolbar input[type="search"] {
-	width: 220px;
+	flex: 1;
+	min-width: 100px;
 	padding: 3px 6px;
 	color: var(--vscode-input-foreground);
 	background: var(--vscode-input-background);
@@ -65,13 +76,24 @@ body { display: flex; flex-direction: column; }
 
 .toolbar button {
 	padding: 3px 10px;
-	color: var(--vscode-button-foreground);
-	background: var(--vscode-button-background);
-	border: none;
+	color: var(--vscode-foreground);
+	background: transparent;
+	border: 1px solid transparent;
 	border-radius: 2px;
 	cursor: pointer;
+	white-space: nowrap;
+	flex-shrink: 0;
 }
-.toolbar button:hover { background: var(--vscode-button-hoverBackground); }
+.toolbar button:hover {
+	background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+	border-color: var(--vscode-panel-border, transparent);
+}
+.toolbar button.active {
+	color: var(--vscode-button-foreground);
+	background: var(--vscode-button-background);
+	border-color: transparent;
+}
+.toolbar button.active:hover { background: var(--vscode-button-hoverBackground); }
 .toolbar button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 
 .toolbar .check {
@@ -117,18 +139,6 @@ body { display: flex; flex-direction: column; }
 	letter-spacing: 0.08em;
 	opacity: 0.5;
 }
-
-/* Impact-depth slider */
-.depth {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	font-size: 0.85em;
-	color: var(--vscode-foreground);
-	white-space: nowrap;
-}
-.depth.hidden { display: none; }
-.depth input[type="range"] { width: 90px; }
 
 /* Edge-detail panel */
 .detail {

@@ -24,9 +24,6 @@
 	let currentGraph = null;
 	let laneMeta = []; // [{ name, y }] for the Flow overlay
 	let baseStats = '';
-	let cyclesOn = false;     // cycle highlight toggle
-	let pathPick = null;      // first node picked for path-between-two, or null
-	let impactDepth = 0;      // 0 = todos os níveis; else cap predecessor depth
 	// Manual layout + colors persisted per workspace (round-tripped to the extension)
 	let savedState = { positions: {}, colors: {} };
 	let persistTimer = null;
@@ -37,9 +34,6 @@
 	const minimapEl = document.getElementById('minimap');
 
 	const detailEl = document.getElementById('detail');
-	const depthWrap = document.getElementById('depth-wrap');
-	const depthEl = document.getElementById('depth');
-	const depthVal = document.getElementById('depth-val');
 
 	// ── Themes ──────────────────────────────────────────────────────────────────
 	const THEMES = {
@@ -233,7 +227,7 @@
 				shape: 'round-rectangle',
 				width: 'label',
 				height: 28,
-				padding: '0 12px',
+				padding: 10,
 				'background-color': 'data(color)',
 				'background-opacity': 0.18,
 				'border-width': 1.5,
@@ -296,25 +290,6 @@
 			} },
 			{ selector: 'edge.impact-hit', style: {
 				'line-color': t.accent, opacity: 0.8,
-			} },
-			// Circular dependencies (Detectar ciclos)
-			{ selector: 'node.cycle', style: {
-				'background-opacity': 1, 'text-opacity': 1,
-				'border-width': 2.5, 'border-color': '#f7768e',
-			} },
-			{ selector: 'edge.cycle', style: {
-				'line-color': '#f7768e', 'target-arrow-color': '#f7768e',
-				width: 2.5, opacity: 0.95, 'z-index': 10,
-			} },
-			// Shortest path between two picked files
-			{ selector: '.path-hit', style: {
-				'background-opacity': 1, 'text-opacity': 1,
-				'line-color': '#e0af68', 'target-arrow-color': '#e0af68',
-				'border-width': 2.5, 'border-color': '#e0af68',
-				width: 3, opacity: 1, 'z-index': 11,
-			} },
-			{ selector: 'node.path-end', style: {
-				'border-width': 3.5, 'border-color': '#e0af68',
 			} },
 			// Edge selected for the detail panel
 			{ selector: 'edge.edge-sel', style: {
@@ -515,10 +490,6 @@
 		for (const m of ['deps', 'flow', 'impact']) {
 			document.getElementById(`mode-${m}`).classList.toggle('active', m === next);
 		}
-		depthWrap.classList.toggle('hidden', next !== 'impact');
-		// leaving a mode cancels any pending analysis overlays
-		if (cyclesOn) { toggleCycles(); }
-		if (pathModeActive()) { togglePathMode(); }
 		hideDetail();
 		if (!cy) { return; }
 		clearModeClasses();
@@ -537,18 +508,8 @@
 		statsEl.textContent = `Trilha de ${node.data('label')}: ${trail.nodes().length} arquivos`;
 	}
 
-	/** Recursive importers, optionally capped at `impactDepth` levels. */
 	function affectedBy(node) {
-		if (!impactDepth) { return node.predecessors(); }
-		let frontier = node;
-		let collected = cy.collection();
-		for (let d = 0; d < impactDepth; d++) {
-			const inc = frontier.incomers();
-			collected = collected.union(inc);
-			frontier = inc.nodes();
-			if (frontier.empty()) { break; }
-		}
-		return collected;
+		return node.predecessors();
 	}
 
 	function showImpact(node) {
@@ -561,8 +522,7 @@
 			affected.addClass('impact-hit');
 		});
 		const count = affected.nodes().length;
-		const scope = impactDepth ? ` (até ${impactDepth} nível${impactDepth === 1 ? '' : 's'})` : '';
-		statsEl.textContent = `${count} arquivo${count === 1 ? '' : 's'} afetado${count === 1 ? '' : 's'} por mudança em ${node.data('label')}${scope}`;
+		statsEl.textContent = `${count} arquivo${count === 1 ? '' : 's'} afetado${count === 1 ? '' : 's'} por mudança em ${node.data('label')}`;
 	}
 
 	function clearInteraction() {
@@ -611,7 +571,6 @@
 		cy.on('tap', 'node', (ev) => {
 			const node = ev.target;
 			if (node.data('type') === 'cluster') { expandCluster(node); return; }
-			if (pathModeActive()) { handlePathPick(node); return; }
 			if (mode === 'flow') { traceTrail(node); return; }
 			if (mode === 'impact') { showImpact(node); return; }
 			openNode(node);
@@ -786,115 +745,6 @@
 
 	function escapeHtml(t) {
 		return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-	}
-
-	// ── Cycle detection (Tarjan SCC over import edges) ────────────────────────────
-	function findCycleElements() {
-		const index = new Map();
-		const low = new Map();
-		const onStack = new Set();
-		const stack = [];
-		const sccs = [];
-		let idx = 0;
-		const nodes = cy.nodes('[type="file"]');
-
-		function strongconnect(v) {
-			const id = v.id();
-			index.set(id, idx);
-			low.set(id, idx);
-			idx++;
-			stack.push(v);
-			onStack.add(id);
-			v.outgoers('edge[type="imports"]').targets().forEach((w) => {
-				if (w.data('type') !== 'file') { return; }
-				const wid = w.id();
-				if (!index.has(wid)) {
-					strongconnect(w);
-					low.set(id, Math.min(low.get(id), low.get(wid)));
-				} else if (onStack.has(wid)) {
-					low.set(id, Math.min(low.get(id), index.get(wid)));
-				}
-			});
-			if (low.get(id) === index.get(id)) {
-				const comp = [];
-				let w;
-				do { w = stack.pop(); onStack.delete(w.id()); comp.push(w); } while (w.id() !== id);
-				if (comp.length > 1) { sccs.push(comp); }
-			}
-		}
-
-		nodes.forEach((v) => { if (!index.has(v.id())) { strongconnect(v); } });
-
-		let result = cy.collection();
-		for (const comp of sccs) {
-			const ids = new Set(comp.map((n) => n.id()));
-			const compNodes = cy.collection(comp);
-			result = result.union(compNodes);
-			compNodes.forEach((n) => n.outgoers('edge[type="imports"]').forEach((e) => {
-				if (ids.has(e.target().id())) { result = result.union(e); }
-			}));
-		}
-		return result;
-	}
-
-	function toggleCycles() {
-		if (!cy) { return; }
-		cyclesOn = !cyclesOn;
-		document.getElementById('cycles').classList.toggle('active', cyclesOn);
-		cy.elements().removeClass('cycle dim');
-		if (!cyclesOn) { statsEl.textContent = baseStats; return; }
-		const cycleEls = findCycleElements();
-		if (cycleEls.empty()) {
-			statsEl.textContent = 'Nenhuma dependência circular encontrada ✓';
-			cyclesOn = false;
-			document.getElementById('cycles').classList.remove('active');
-			return;
-		}
-		cy.batch(() => {
-			cy.elements().not(cycleEls).addClass('dim');
-			cycleEls.addClass('cycle');
-		});
-		const n = cycleEls.nodes().length;
-		statsEl.textContent = `${n} arquivos em dependências circulares`;
-	}
-
-	// ── Shortest path between two files ──────────────────────────────────────────
-	function togglePathMode() {
-		const btn = document.getElementById('path');
-		const active = !btn.classList.contains('active');
-		btn.classList.toggle('active', active);
-		pathPick = null;
-		cy.elements().removeClass('path-hit path-end dim');
-		statsEl.textContent = active ? 'Clique no arquivo de origem…' : baseStats;
-	}
-
-	function pathModeActive() {
-		return document.getElementById('path').classList.contains('active');
-	}
-
-	function handlePathPick(node) {
-		if (!pathPick) {
-			pathPick = node;
-			cy.elements().removeClass('path-hit path-end dim');
-			node.addClass('path-end');
-			statsEl.textContent = `Origem: ${node.data('label')} — clique no destino…`;
-			return;
-		}
-		const dijkstra = cy.elements().dijkstra({ root: pathPick, directed: true });
-		const path = dijkstra.pathTo(node);
-		cy.elements().removeClass('path-hit path-end dim');
-		if (!path || path.length <= 1) {
-			statsEl.textContent = `Sem caminho de ${pathPick.data('label')} → ${node.data('label')}`;
-		} else {
-			cy.batch(() => {
-				cy.elements().not(path).addClass('dim');
-				path.addClass('path-hit');
-				pathPick.addClass('path-end');
-				node.addClass('path-end');
-			});
-			statsEl.textContent = `${pathPick.data('label')} → ${node.data('label')}: ${path.nodes().length} passos`;
-		}
-		pathPick = null;
 	}
 
 	// ── Manual layout + colors persistence ───────────────────────────────────────
@@ -1101,8 +951,6 @@
 	document.getElementById('mode-flow').addEventListener('click', () => setMode('flow'));
 	document.getElementById('mode-impact').addEventListener('click', () => setMode('impact'));
 
-	document.getElementById('cycles').addEventListener('click', toggleCycles);
-	document.getElementById('path').addEventListener('click', () => { if (cy) { togglePathMode(); } });
 	document.getElementById('export-png').addEventListener('click', exportPng);
 	document.getElementById('export-svg').addEventListener('click', exportSvg);
 	document.getElementById('reset-layout').addEventListener('click', resetManualState);
@@ -1116,11 +964,6 @@
 	minimapEl.addEventListener('mousedown', (e) => { minimapDragging = true; panFromMinimap(e); });
 	window.addEventListener('mousemove', (e) => { if (minimapDragging) { panFromMinimap(e); } });
 	window.addEventListener('mouseup', () => { minimapDragging = false; });
-
-	depthEl.addEventListener('input', () => {
-		impactDepth = Number(depthEl.value);
-		depthVal.textContent = impactDepth === 0 ? 'todos' : String(impactDepth);
-	});
 
 	document.getElementById('fit').addEventListener('click', () => {
 		if (cy) { cy.animate({ fit: { padding: 50 }, duration: 250 }); }
@@ -1140,9 +983,14 @@
 			savedState = msg.saved || { positions: {}, colors: {} };
 			cyEl.style.background = theme().bg;
 			lanesEl.style.color = theme().fg;
-			render(msg.graph);
-			populateFolderFilter(msg.graph);
-			overlayEl.classList.add('hidden');
+			try {
+				render(msg.graph);
+				populateFolderFilter(msg.graph);
+				overlayEl.classList.add('hidden');
+			} catch (err) {
+				overlayText.textContent = `Erro ao renderizar o grafo: ${err instanceof Error ? err.message : String(err)}`;
+				overlayEl.querySelector('.spinner').style.display = 'none';
+			}
 		} else if (msg.type === 'theme') {
 			applyTheme(msg.theme);
 		} else if (msg.type === 'error') {
