@@ -89,9 +89,19 @@ export class GraphPanel {
 			},
 			resetState: () => Promise.resolve(this.context.workspaceState.update(this.stateKey(), undefined)),
 			open: async (m) => {
-				const root = workspaceRoot();
-				if (m.path && root) {
-					await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(root, m.path));
+				if (!m.path) { return; }
+				const wsFolders = vscode.workspace.workspaceFolders ?? [];
+				if (!wsFolders.length) { return; }
+				if (wsFolders.length === 1) {
+					await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(wsFolders[0].uri, m.path));
+				} else {
+					const folder = wsFolders.find(f => m.path!.startsWith(path.basename(f.uri.fsPath) + '/'));
+					if (folder) {
+						const rel = m.path.slice(path.basename(folder.uri.fsPath).length + 1);
+						await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(folder.uri, rel));
+					} else {
+						await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(wsFolders[0].uri, m.path));
+					}
 				}
 			},
 		};
@@ -130,19 +140,23 @@ export class GraphPanel {
 	}
 
 	private async sendGraph(): Promise<void> {
-		const root = workspaceRoot();
-		if (!root) {
+		const wsFolders = vscode.workspace.workspaceFolders ?? [];
+		if (!wsFolders.length) {
 			await this.panel.webview.postMessage({ type: 'error', message: 'No workspace open.' });
 			return;
 		}
 		try {
-			const graph = await buildProjectGraph(root, getExclude());
+			const roots = wsFolders.map(f => f.uri);
+			const graph = await buildProjectGraph(roots, getExclude());
+			const rootName = wsFolders.length === 1
+				? path.basename(wsFolders[0].uri.fsPath)
+				: (vscode.workspace.name ?? 'workspace');
 			await this.panel.webview.postMessage({
 				type: 'graph',
 				graph,
 				theme: graphTheme(),
 				saved: this.savedState(),
-				rootName: path.basename(root.fsPath),
+				rootName,
 			});
 		} catch (err) {
 			await this.panel.webview.postMessage({

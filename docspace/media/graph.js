@@ -493,7 +493,7 @@
 		hideDetail();
 		if (!cy) { return; }
 		clearModeClasses();
-		cy.layout(layoutOptions()).run();
+		startLayout(cy, layoutOptions(), null);
 		applyModeStyle();
 	}
 
@@ -557,7 +557,8 @@
 
 	function render(graph) {
 		currentGraph = graph;
-		if (cy) { cy.destroy(); }
+		stopLayout();
+		if (cy) { cy.stop(true, true); cy.destroy(); }
 		cy = cytoscape({
 			container: cyEl,
 			elements: toElements(clusterGraph(graph)),
@@ -580,7 +581,7 @@
 		cy.on('tap', (ev) => {
 			if (ev.target !== cy) { return; }
 			hideDetail();
-			if (mode !== 'deps' && !pathModeActive()) { clearInteraction(); }
+			if (mode !== 'deps') { clearInteraction(); }
 		});
 		cy.on('mouseover', 'node', (ev) => {
 			cyEl.style.cursor = 'pointer';
@@ -603,9 +604,7 @@
 		cy.on('cxttap', 'node', (ev) => { ev.originalEvent.preventDefault(); showColorMenu(ev.target, ev.renderedPosition); });
 
 		applyFilters({ relayout: false });
-		const lay = cy.layout(layoutOptions());
-		lay.one('layoutstop', () => { applySavedPositions(); scheduleMinimap(); });
-		lay.run();
+		startLayout(cy, layoutOptions(), () => { applySavedPositions(); scheduleMinimap(); });
 		applyModeStyle();
 		scheduleMinimap();
 
@@ -661,18 +660,12 @@
 			}
 		});
 
-		// Relayout only when a filter is active — render() lays out the full
-		// graph itself, and a second run here would cancel its animation.
-		if (relayout && (folder || filesOnly || hideTests)) {
+		// Filters only show/hide — no layout re-run (avoids race conditions with
+		// the mode layout). Just fit the viewport to whatever is visible.
+		if (relayout) {
 			const visible = cy.elements().not('.hidden');
-			const filterLayout = visible.layout({ ...layoutOptions(), animate: true, animationDuration: 300 });
-			filterLayout.on('layoutstop', () => {
-				cy.animate({ fit: { eles: visible, padding: 50 }, duration: 200 });
-				applyModeStyle();
-			});
-			filterLayout.run();
-		} else if (relayout) {
-			cy.layout(layoutOptions()).run();
+			cy.stop(true);
+			if (!visible.empty()) { cy.animate({ fit: { eles: visible, padding: 50 }, duration: 200 }); }
 			applyModeStyle();
 		}
 
@@ -688,16 +681,34 @@
 			(n.data('label') || '').toLowerCase().includes(query));
 	}
 
+	let activeLayout = null;
 	let searchLayoutTimer = null;
 	let lastLayoutQuery = '';
 
+	function stopLayout() {
+		if (activeLayout) { try { activeLayout.stop(); } catch (_) {} activeLayout = null; }
+	}
+
+	/** Stop any running layout, start a new one; onStop fires only if not superseded. */
+	function startLayout(source, opts, onStop) {
+		stopLayout();
+		const lay = source.layout(opts);
+		activeLayout = lay;
+		lay.one('layoutstop', () => {
+			if (activeLayout !== lay) { return; }
+			activeLayout = null;
+			onStop?.();
+		});
+		lay.run();
+	}
+
 	function relayoutSearchResults() {
 		const active = cy.elements().not('.dim').not('.hidden');
-		const searchLayout = active.layout({ ...layoutOptions(), animate: true, animationDuration: 300 });
-		searchLayout.on('layoutstop', () => {
+		startLayout(active, { ...layoutOptions(), animate: true, animationDuration: 300 }, () => {
+			if (!cy) { return; }
+			cy.stop(true);
 			cy.animate({ fit: { eles: active, padding: 50 }, duration: 200 });
 		});
-		searchLayout.run();
 	}
 
 	function applySearch() {

@@ -24,7 +24,6 @@ export interface ProjectGraph {
 	edges: GraphEdge[];
 }
 
-const MAX_FILES = 1500;
 const RESOLVE_SUFFIXES = ['', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '/index.ts', '/index.js'];
 
 const CODE_LANGUAGES = new Set([
@@ -154,26 +153,33 @@ function langIdFor(uri: vscode.Uri): string {
 	return EXT_LANG[ext] ?? 'plaintext';
 }
 
+interface CollectedFile { wsRel: string; relToRoot: string; langId: string; rootUri: vscode.Uri }
+
 async function collectCodeFiles(
-	rootUri: vscode.Uri,
+	roots: vscode.Uri[],
 	exclude: string[],
-): Promise<Array<{ rel: string; langId: string }>> {
+): Promise<CollectedFile[]> {
+	const multiRoot = roots.length > 1;
 	const allExclude = [...new Set([...exclude, ...EXTRA_EXCLUDE])];
 	const excludeParts = allExclude.map((e) => `**/${e}/**`).concat(['**/.*/**']);
-	const excludeGlob = excludeParts.length > 0 ? `{${excludeParts.join(',')}}` : undefined;
+	const excludeGlob = `{${excludeParts.join(',')}}`;
 
-	const pattern = new vscode.RelativePattern(rootUri, '**/*');
-	const uris = await vscode.workspace.findFiles(pattern, excludeGlob, MAX_FILES);
+	const results: CollectedFile[] = [];
+	for (const rootUri of roots) {
+		const rootName = path.basename(rootUri.fsPath);
+		const rootFsPath = rootUri.fsPath;
+		const pattern = new vscode.RelativePattern(rootUri, '**/*');
+		const uris = await vscode.workspace.findFiles(pattern, excludeGlob);
 
-	const rootFsPath = rootUri.fsPath;
-	return uris
-		.map((uri) => {
+		for (const uri of uris) {
 			const langId = langIdFor(uri);
-			if (!CODE_LANGUAGES.has(langId)) { return null; }
-			const rel = uri.fsPath.slice(rootFsPath.length + 1).split(path.sep).join('/');
-			return { rel, langId };
-		})
-		.filter((r): r is { rel: string; langId: string } => r !== null);
+			if (!CODE_LANGUAGES.has(langId)) { continue; }
+			const relToRoot = uri.fsPath.slice(rootFsPath.length + 1).split(path.sep).join('/');
+			const wsRel = multiRoot ? `${rootName}/${relToRoot}` : relToRoot;
+			results.push({ wsRel, relToRoot, langId, rootUri });
+		}
+	}
+	return results;
 }
 
 function ensureFolderChain(rel: string, nodes: Map<string, GraphNode>): string {
@@ -259,16 +265,17 @@ async function resolveImportsForFile({ rel, langId, uri, mtime }: FileEntry): Pr
  *   Layer 1 — per-file import cache validated by mtime (skips re-parsing unchanged files).
  *   Layer 2 — full graph cache keyed by all fsPath:mtime pairs (returns instantly when nothing changed).
  */
-export async function buildProjectGraph(rootUri: vscode.Uri, exclude: string[]): Promise<ProjectGraph> {
-	const collected = await collectCodeFiles(rootUri, exclude);
+export async function buildProjectGraph(rootUris: vscode.Uri | vscode.Uri[], exclude: string[]): Promise<ProjectGraph> {
+	const roots = Array.isArray(rootUris) ? rootUris : [rootUris];
+	const collected = await collectCodeFiles(roots, exclude);
 
 	// Stat all files once — feeds both cache layers
 	const fileEntries = await Promise.all(
-		collected.map(async ({ rel, langId }) => {
-			const uri = vscode.Uri.joinPath(rootUri, rel);
+		collected.map(async ({ wsRel, relToRoot, langId, rootUri }) => {
+			const uri = vscode.Uri.joinPath(rootUri, relToRoot);
 			let mtime = -1;
 			try { mtime = (await vscode.workspace.fs.stat(uri)).mtime; } catch { /* keep -1 */ }
-			return { rel, langId, uri, mtime };
+			return { rel: wsRel, langId, uri, mtime };
 		})
 	);
 

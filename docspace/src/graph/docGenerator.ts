@@ -214,7 +214,8 @@ export async function generateProjectDocs(context: vscode.ExtensionContext): Pro
 	const root = workspaceRoot();
 	if (!root) { throw new Error('Nenhum workspace aberto.'); }
 
-	const graph = await buildProjectGraph(root, getExclude());
+	const roots = vscode.workspace.workspaceFolders?.map(f => f.uri) ?? [root];
+	const graph = await buildProjectGraph(roots, getExclude());
 	const dir = vscode.Uri.joinPath(root, GENERATED_DIR);
 	await vscode.workspace.fs.createDirectory(dir);
 
