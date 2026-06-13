@@ -7,39 +7,49 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 docspace/
 ├── src/
-│   ├── extension.ts          # Entry point — activate() registers commands, providers, watchers
-│   ├── config.ts             # Per-category config (getCategoryConfig, resolveCategoryRoot), GENERATED_DIR
-│   ├── treeItem.ts           # WorkspaceTreeItem, ItemKind (incl. genFolder/genFile), FilterKey
-│   ├── fileFilter.ts         # isRelevantByName(), needsContentCheck(), isFileRelevant(), hasMermaidBlock()
-│   ├── dirReader.ts          # readDirChildren(), hasRelevantContent(), safeReadDirectory()
-│   ├── scanCache.ts          # discovery caches + per-path invalidation (also invalidates graph cache)
-│   ├── provider.ts           # DocspaceProvider (TreeDataProvider) — 3 fixed categories, debounced refresh
-│   ├── previewPanel.ts       # PreviewPanel — native editor + webview preview + ![[embeds]] resolution
-│   ├── graphPanel.ts         # GraphPanel — project graph webview (Cytoscape.js), themes
-│   ├── projectGraph.ts       # buildProjectGraph(), extractImports(), detectRole(), 2-layer cache
-│   ├── docGenerator.ts       # generateProjectDocs() — writes read-only docGerada/ from the graph
-│   ├── canvasEditor.ts       # CanvasEditorProvider — CustomTextEditorProvider for .excalidraw
-│   ├── notionConvert.ts      # Pure block↔markdown conversion (blocksToMarkdown, markdownToBlocks)
-│   ├── notionClient.ts       # NotionClient — REST over Node https (search, blockTree, replaceContent)
-│   ├── notion.ts             # NotionManager — connect/import/pull/push, polling, file-decoration badge
+│   ├── extension.ts               # Entry point — activate() registers all commands, providers, watchers
+│   ├── editor/
+│   │   ├── canvasEditor.ts        # CanvasEditorProvider — CustomTextEditorProvider for .excalidraw
+│   │   └── previewPanel.ts        # PreviewPanel — native editor + webview preview + ![[embeds]] resolution
+│   ├── graph/
+│   │   ├── docGenerator.ts        # generateProjectDocs() — writes read-only docGerada/ from the graph
+│   │   ├── graphPanel.ts          # GraphPanel — project graph webview (Cytoscape.js), themes
+│   │   └── projectGraph.ts        # buildProjectGraph(), extractImports(), detectRole(), 2-layer cache
+│   ├── mcp/
+│   │   ├── graphBuilder.ts        # Standalone graph builder (pure fs — no VS Code API, used by MCP server)
+│   │   ├── server.ts              # MCP stdio server — Content-Length framing, JSON-RPC 2.0
+│   │   ├── setup.ts               # Harness picker (QuickPick) — configures MCP in external AI clients
+│   │   └── tools.ts               # MCP tool definitions and handlers (dispatched by server.ts)
+│   ├── notion/
+│   │   ├── notion.ts              # NotionManager — connect/import/pull/push, polling, decoration badge
+│   │   ├── notionClient.ts        # NotionClient — REST over Node https (search, blockTree, replaceContent)
+│   │   └── notionConvert.ts       # Pure block↔markdown conversion (blocksToMarkdown, markdownToBlocks)
+│   ├── sidebar/
+│   │   ├── config.ts              # Per-category config (getCategoryConfig, resolveCategoryRoot), GENERATED_DIR
+│   │   ├── dirReader.ts           # readDirChildren(), hasRelevantContent(), safeReadDirectory()
+│   │   ├── fileFilter.ts          # isRelevantByName(), needsContentCheck(), isFileRelevant(), hasMermaidBlock()
+│   │   ├── provider.ts            # DocspaceProvider (TreeDataProvider) — 3 fixed categories, debounced refresh
+│   │   ├── scanCache.ts           # discovery caches + per-path invalidation (also invalidates graph cache)
+│   │   └── treeItem.ts            # WorkspaceTreeItem, ItemKind (incl. genFolder/genFile), FilterKey
 │   └── test/
-│       ├── scanCache.test.ts # Mocha tests — cache invalidation semantics
-│       ├── fileFilter.test.ts# Mocha tests — filename/filter matching
-│       ├── projectGraph.test.ts # Mocha tests — import extraction/resolution, roles, test detection
-│       └── notionConvert.test.ts # Mocha tests — block↔markdown conversion
+│       ├── fileFilter.test.ts     # Mocha tests — filename/filter matching
+│       ├── notionConvert.test.ts  # Mocha tests — block↔markdown conversion
+│       ├── projectGraph.test.ts   # Mocha tests — import extraction/resolution, roles, test detection
+│       └── scanCache.test.ts      # Mocha tests — cache invalidation semantics
 ├── media/
-│   ├── preview.js            # Webview JS: markdown/mermaid + ![[x.mmd]]/![[x.excalidraw]] embeds + file links
-│   ├── preview.css           # Webview CSS: typography, mermaid-container, embed boxes
-│   ├── canvas.js             # Webview JS: initializes Excalidraw (UMD 0.17.6), bidirectional sync
-│   ├── canvas.css            # Webview CSS: full-screen Excalidraw container
-│   ├── graph.js              # Webview JS: 3 graph modes, themes, swimlanes, impact, search/filter
-│   └── graph.css             # Webview CSS: toolbar, lane overlay, canvas
+│   ├── preview.js                 # Webview JS: markdown/mermaid + ![[x.mmd]]/![[x.excalidraw]] embeds
+│   ├── preview.css                # Webview CSS: typography, mermaid-container, embed boxes
+│   ├── canvas.js                  # Webview JS: initializes Excalidraw (UMD 0.17.6), bidirectional sync
+│   ├── canvas.css                 # Webview CSS: full-screen Excalidraw container
+│   ├── graph.js                   # Webview JS: 3 graph modes, themes, swimlanes, impact, search/filter
+│   ├── graph.css                  # Webview CSS: toolbar, lane overlay, canvas
+│   └── walkthrough/               # SVG illustrations for the onboarding walkthrough steps
 ├── resources/
-│   └── icon.svg              # Activity Bar icon
-├── out/                      # Compiled JS output (gitignored)
-├── package.json              # Extension manifest, scripts, and contributes
-├── tsconfig.json             # TypeScript config (ES2022, Node16, strict)
-└── eslint.config.mjs         # ESLint rules (includes complexity: max 10)
+│   └── icon.svg                   # Activity Bar icon
+├── out/                           # Compiled JS output (gitignored)
+├── package.json                   # Extension manifest, scripts, and contributes
+├── tsconfig.json                  # TypeScript config (ES2022, Node16, strict)
+└── eslint.config.mjs              # ESLint rules (includes complexity: max 10)
 ```
 
 ## Commands
@@ -73,15 +83,15 @@ Creating files: right-click menus per category (`dsCat_docs` → newMarkdown etc
 
 ### Generated docs (`docGerada/`)
 
-`docspace.regenerateDoc` (book icon in the panel header) runs `generateProjectDocs(context)` (`src/docGenerator.ts`): builds the project graph and writes `index.md` (links to all generated docs + a structural diff vs. the previous run), `estrutura.md` (files grouped by detected role), `dependencias.md` (per-file imports + packages), `acoplamento.md` (coupling ranking table), `fluxos.md` (execution paths from entry points) into `docGerada/` at the workspace root, each headed with the generation date. The previous run's structural snapshot (`{files, couplings}`) is persisted in `context.globalState` keyed by workspace path; `diffSnapshots` produces added/removed files and couplings (pure data comparison, no AI). The folder shows pinned at the top of the Docs category with a `sparkle` icon; `index.md` is pinned first among generated files; its files use kind `genFile` (contextValues `dsGenFolder`/`dsGenFile` keep rename/delete/new menus away, and the commands also guard against those kinds). The normal scan excludes `docGerada` (see `DocspaceProvider.scanExclude`).
+`docspace.regenerateDoc` (book icon in the panel header) runs `generateProjectDocs(context)` (`src/graph/docGenerator.ts`): builds the project graph and writes `index.md` (links to all generated docs + a structural diff vs. the previous run), `estrutura.md` (files grouped by detected role), `dependencias.md` (per-file imports + packages), `acoplamento.md` (coupling ranking table), `fluxos.md` (execution paths from entry points) into `docGerada/` at the workspace root, each headed with the generation date. The previous run's structural snapshot (`{files, couplings}`) is persisted in `context.globalState` keyed by workspace path; `diffSnapshots` produces added/removed files and couplings (pure data comparison, no AI). The folder shows pinned at the top of the Docs category with a `sparkle` icon; `index.md` is pinned first among generated files; its files use kind `genFile` (contextValues `dsGenFolder`/`dsGenFile` keep rename/delete/new menus away, and the commands also guard against those kinds). The normal scan excludes `docGerada` (see `DocspaceProvider.scanExclude`).
 
 Category items carry a **badge** (`item.description` = relevant file count via `countRelevantFiles`). Files are sorted by `docspace.sortBy` (`name`/`modified`/`size`; modified & size stat each file); the `docspace.selectSort` command (sort icon in header) picks it.
 
-### Tree refresh & caching (`src/scanCache.ts`)
+### Tree refresh & caching (`src/sidebar/scanCache.ts`)
 
 Discovery results (directory relevance, mermaid-block checks) are cached. A `FileSystemWatcher` scoped to `**/*.{md,mmd,excalidraw}` invalidates only the affected path (plus ancestors/descendants) via `provider.invalidate(uri)`; refreshes are debounced (300ms). `invalidatePath` also calls `invalidateGraphFile` so file changes invalidate the graph caches. Never wire broad listeners like `onDidSaveTextDocument` to a full refresh. Config changes to category modes/folders/exclude call `provider.refreshAll()`.
 
-### Project graph (`src/projectGraph.ts` + `src/graphPanel.ts` + `media/graph.js`)
+### Project graph (`src/graph/projectGraph.ts` + `src/graph/graphPanel.ts` + `media/graph.js`)
 
 1. `buildProjectGraph()` collects code files via `findFiles` + `RelativePattern` (honours `docspace.exclude` + built-in extras like `bin`/`obj`/`__pycache__`/`vendor`, skips dot-folders, caps at 1500 files). Language detected by extension map (`EXT_LANG`); supported: TS/JS(+react), C#, Python, Go, Rust, Java, C/C++, Ruby, PHP, Swift, Kotlin. `extractImports(source, languageId)` has per-language patterns (JS/TS family, C# `using`/ProjectReference, Python, Go); other languages get file nodes without edges. Namespace-style bare specs (`System.IO`, `os.path`) don't become module nodes.
 2. Node data includes `role` (detectRole: entry/controller/service/repository/model/util/other by filename heuristics; modules are `external`) and `isTest` (`.test.`/`.spec.`/test folders). Edges carry `weight` (repeat imports between a pair).
@@ -94,7 +104,7 @@ Discovery results (directory relevance, mermaid-block checks) are cached. A `Fil
 5. **Themes** (`docspace.graphTheme`): auto (follows VS Code), obsidian, blueprint, pastel, high-contrast. Selectable from the webview toolbar (persists via `setTheme` message → config) and reacts to config changes.
 6. UMD chain: fcose needs `layout-base`/`cose-base` globals loaded first (pinned versions on jsdelivr). Flow mode uses a preset layout, so dagre is no longer needed.
 
-### Preview flow (`src/previewPanel.ts` + `media/preview.js`)
+### Preview flow (`src/editor/previewPanel.ts` + `media/preview.js`)
 
 1. `PreviewPanel.createOrShow()` opens the file natively (column One) + a live webview (column Two); `onDidChangeTextDocument` → `postMessage({ type:'update', content, embeds })` re-renders (~80ms debounce).
 2. **References inside .md**: `![[file.mmd]]` renders the Mermaid diagram inline; `![[file.excalidraw]]` renders the canvas inline as SVG via `@excalidraw/utils` (pinned UMD, global `ExcalidrawUtils.exportToSvg`); missing refs show a warning box. The extension resolves refs relative to the document folder (`collectEmbeds`) and ships contents to the webview.
@@ -102,11 +112,11 @@ Discovery results (directory relevance, mermaid-block checks) are cached. A `Fil
 4. Rendering: markdown-it (CDN) for `.md`, mermaid@11 (CDN), `@panzoom/panzoom` for diagram pan/zoom. Mermaid theme via `docspace.diagramTheme` (auto follows VS Code).
 5. **TOC**: `.md` with ≥3 `##`/`###` headings gets a clickable table of contents inserted at the top (smooth-scroll). **Copy button**: every non-mermaid `<pre>` gets a hover "Copiar" button (`navigator.clipboard`).
 
-### Canvas editor flow (`src/canvasEditor.ts`)
+### Canvas editor flow (`src/editor/canvasEditor.ts`)
 
 `CanvasEditorProvider` is a `CustomTextEditorProvider` for `*.excalidraw`. Excalidraw is loaded as UMD **pinned to 0.17.6** (the last version with a UMD build — 0.18+ is ESM-only and 404s on the old URL); React 18.2.0 pinned likewise. Webview → document sync via debounced (500ms) `WorkspaceEdit.replace`; document → webview via `updateScene`. VS Code handles save/undo/dirty natively.
 
-### Notion integration (`src/notion.ts` + `notionClient.ts` + `notionConvert.ts`)
+### Notion integration (`src/notion/`)
 
 Manual-token approach (no OAuth, no embedded secret): the user pastes an Internal Integration Token into `docspace.notionToken` (stored at `application` scope — user profile, never the repo). `NotionManager` (instantiated in `activate`, refreshes the tree on change) registers commands `notionConnect`/`notionImport`/`notionPull`/`notionPush`/`notionDisconnect`.
 
@@ -127,8 +137,6 @@ Manual-token approach (no OAuth, no embedded secret): the user pastes an Interna
 - `docspace.notionToken` — Notion Internal Integration Token (application scope)
 - `docspace.notionPollMinutes` — Notion auto-sync interval in minutes (0 disables)
 - `docspace.exclude` — folders to ignore (default `["node_modules", ".git", "out", "dist"]`)
-
-The entire expanded spec is now implemented.
 
 ### Tests
 

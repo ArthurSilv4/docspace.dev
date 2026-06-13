@@ -1,0 +1,74 @@
+<svg viewBox="0 0 600 320" xmlns="http://www.w3.org/2000/svg" font-family="system-ui,-apple-system,sans-serif">
+  <rect width="600" height="320" fill="#1e1e2e"/>
+
+  <!-- ── left: folder tree ── -->
+  <rect x="0" y="0" width="220" height="320" fill="#252535"/>
+  <text x="14" y="24" fill="#6c7086" font-size="10" font-weight="700" letter-spacing="0.8">EXPLORER</text>
+
+  <!-- workspace root -->
+  <text x="14" y="50" fill="#cdd6f4" font-size="12">📁 meu-projeto</text>
+
+  <!-- src folder -->
+  <text x="30" y="72" fill="#a6adc8" font-size="12">▸ src/</text>
+
+  <!-- docGerada folder — highlighted -->
+  <rect x="26" y="82" width="188" height="26" rx="3" fill="#313155"/>
+  <text x="34" y="99" fill="#f9e2af" font-size="12">✨ docGerada/</text>
+
+  <!-- generated files -->
+  <text x="52" y="120" fill="#89b4fa" font-size="11">📌 index.md</text>
+  <text x="52" y="138" fill="#a6adc8" font-size="11">📄 estrutura.md</text>
+  <text x="52" y="156" fill="#a6adc8" font-size="11">📄 dependencias.md</text>
+  <text x="52" y="174" fill="#a6adc8" font-size="11">📄 acoplamento.md</text>
+  <text x="52" y="192" fill="#a6adc8" font-size="11">📄 fluxos.md</text>
+
+  <!-- other files -->
+  <text x="30" y="214" fill="#6c7086" font-size="12">▸ node_modules/</text>
+  <text x="30" y="234" fill="#6c7086" font-size="12">📄 package.json</text>
+  <text x="30" y="254" fill="#6c7086" font-size="12">📄 README.md</text>
+
+  <!-- divider -->
+  <rect x="220" y="0" width="1" height="320" fill="#313145"/>
+
+  <!-- ── right: index.md preview ── -->
+  <rect x="221" y="0" width="379" height="320" fill="#1e1e2e"/>
+
+  <!-- tab -->
+  <rect x="221" y="0" width="379" height="34" fill="#252535"/>
+  <rect x="221" y="0" width="148" height="34" fill="#1e1e2e"/>
+  <text x="235" y="22" fill="#f9e2af" font-size="12">✨ index.md</text>
+  <rect x="221" y="33" width="148" height="2" fill="#89b4fa"/>
+
+  <!-- content -->
+  <text x="240" y="62" fill="#cdd6f4" font-size="16" font-weight="700"># Documentação do Projeto</text>
+
+  <rect x="236" y="72" width="340" height="1" fill="#313145"/>
+
+  <text x="240" y="90" fill="#6c7086" font-size="10" font-style="italic">Gerado automaticamente em 12/06/2026 às 14:32</text>
+
+  <!-- diff summary box -->
+  <rect x="236" y="100" width="340" height="56" rx="4" fill="#252535" stroke="#313145" stroke-width="1"/>
+  <text x="250" y="118" fill="#a6adc8" font-size="11" font-weight="600">📊 Mudanças desde a última geração</text>
+  <text x="250" y="136" fill="#a6e3a1" font-size="11">+ 3 arquivos adicionados</text>
+  <text x="350" y="136" fill="#f38ba8" font-size="11">− 1 arquivo removido</text>
+  <text x="250" y="150" fill="#f9e2af" font-size="11">~ 2 novas dependências detectadas</text>
+
+  <!-- sections list -->
+  <text x="240" y="178" fill="#cdd6f4" font-size="13" font-weight="600">## Seções</text>
+
+  <text x="250" y="198" fill="#89b4fa" font-size="12">→ estrutura.md</text>
+  <text x="390" y="198" fill="#6c7086" font-size="10">24 arquivos, 6 papéis</text>
+
+  <text x="250" y="218" fill="#89b4fa" font-size="12">→ dependencias.md</text>
+  <text x="390" y="218" fill="#6c7086" font-size="10">87 imports mapeados</text>
+
+  <text x="250" y="238" fill="#89b4fa" font-size="12">→ acoplamento.md</text>
+  <text x="390" y="238" fill="#6c7086" font-size="10">top 10 mais acoplados</text>
+
+  <text x="250" y="258" fill="#89b4fa" font-size="12">→ fluxos.md</text>
+  <text x="390" y="258" fill="#6c7086" font-size="10">3 entry points</text>
+
+  <!-- regenerate button hint -->
+  <rect x="236" y="278" width="340" height="28" rx="4" fill="#313155" stroke="#89b4fa" stroke-width="1" opacity="0.7"/>
+  <text x="406" y="296" text-anchor="middle" fill="#89b4fa" font-size="11">📖  Clique em  para regenerar a qualquer momento</text>
+</svg>

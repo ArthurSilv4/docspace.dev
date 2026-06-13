@@ -309,6 +309,13 @@ async function regenerateDoc(
 	}
 }
 
+const WALKTHROUGH_ID = 'ArthurSilv4.docspace-workspace#docspace.onboarding';
+
+function openWalkthrough(): void {
+	void vscode.commands.executeCommand('workbench.action.openWalkthrough', WALKTHROUGH_ID);
+}
+
+
 export function activate(context: vscode.ExtensionContext): void {
 	const provider = new DocspaceProvider();
 	const externalWatcher = new ExternalRootsWatcher(provider);
@@ -323,10 +330,18 @@ export function activate(context: vscode.ExtensionContext): void {
 		...notion.register(),
 		CanvasEditorProvider.register(context),
 		vscode.window.registerTreeDataProvider('docspace.explorer', provider),
+		vscode.commands.registerCommand('docspace.showWelcome', openWalkthrough),
 	);
 
 	registerCommands(context, provider);
 	registerTreeEvents(context, provider, externalWatcher);
+
+	// First-run: open the walkthrough automatically on new install
+	const welcomed = context.globalState.get<boolean>('docspace.welcomed');
+	if (!welcomed) {
+		void context.globalState.update('docspace.welcomed', true);
+		setTimeout(openWalkthrough, 1500);
+	}
 }
 
 export function deactivate(): void { }

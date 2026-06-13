@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "docspace": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "c:/Users/arthu/Desktop/docspace.dev/docspace/out/mcp/server.js",
+        "--workspace",
+        "c:/Users/arthu/Desktop/docspace.dev/docspace"
+      ]
+    }
+  }
+}
