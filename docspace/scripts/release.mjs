@@ -17,7 +17,11 @@ const PKG = join(ROOT, 'package.json');
 const CHANGELOG = join(ROOT, 'CHANGELOG.md');
 
 function run(cmd, args, opts = {}) {
-	return execFileSync(cmd, args, { cwd: ROOT, encoding: 'utf8', stdio: 'pipe', shell: process.platform === 'win32', ...opts });
+	// npm/npx are .cmd shims on Windows and need a shell; git is a real exe and
+	// must NOT use a shell, otherwise multi-word args (e.g. the commit message)
+	// get split and break (git would read "v0.0.7" as a pathspec).
+	const useShell = process.platform === 'win32' && (cmd === 'npm' || cmd === 'npx');
+	return execFileSync(cmd, args, { cwd: ROOT, encoding: 'utf8', stdio: 'pipe', shell: useShell, ...opts });
 }
 
 function readVersion() {
