@@ -1,5 +1,5 @@
 {
-  "displayName": "Docspace",
+  "displayName": "Docspace Workspace",
   "description": "Visualize and manage Markdown, Mermaid diagrams and Excalidraw canvases inside VS Code.",
 
   "command.openPreview.title": "Open Preview",
