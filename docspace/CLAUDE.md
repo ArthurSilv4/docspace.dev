@@ -41,12 +41,21 @@ docspace/
 │   └── walkthrough/               # SVG illustrations for the onboarding walkthrough steps
 ├── l10n/                          # Translated string bundles (VS Code l10n)
 ├── resources/
-│   └── icon.svg                   # Activity Bar icon
+│   ├── icon.svg                   # Activity Bar icon (uses currentColor — correct for VS Code UI)
+│   └── icon.png                   # Marketplace icon — 256×256 PNG with explicit colors
+├── scripts/
+│   └── release.mjs                # Release automation (prepare / finish phases)
 ├── out/                           # Compiled JS output (gitignored)
 ├── package.json                   # Extension manifest, scripts, and contributes
 ├── tsconfig.json                  # TypeScript config (ES2022, Node16, strict)
 └── eslint.config.mjs              # ESLint rules (includes complexity: max 10)
 ```
+
+## Code Rules
+
+- **Limite de 300 linhas por arquivo.** Nenhum arquivo em `src/` pode ultrapassar 300 linhas. Se uma edição faria um arquivo passar desse limite, extraia a lógica em um módulo TypeScript separado antes de continuar. **Exceção conhecida:** `src/extension.ts` está em 374 linhas — próxima refatoração deve dividir os blocos de registro de comando em módulos separados.
+- **Limite de 300 linhas para `media/` também.** Scripts de webview não têm bundler nem `import/export`, então o padrão é múltiplos `<script>` em ordem: cada arquivo expõe um objeto global (`window.GraphThemes`, `window.GraphLayout`, etc.) e é referenciado no HTML gerado pelo painel TypeScript correspondente. **Exceção conhecida:** `media/graph.js` está em 922 linhas — já dividido em seções com comentários `// ──`; a próxima refatoração deve extrair: `graph-themes.js`, `graph-style.js`, `graph-layout.js`, `graph-elements.js`, `graph-minimap.js` como globals e reduzir o `graph.js` principal ao estado + render + wire-up.
+- **Sempre rode `npm run lint` ao final de qualquer alteração em `src/`.** A entrega só está completa quando o lint passa sem erros.
 
 ## Commands
 
