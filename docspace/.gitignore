@@ -6,3 +6,4 @@ node_modules
 l10n/
 .docspace/
 .DS_Store
+.vscode/**  

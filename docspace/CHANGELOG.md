@@ -4,6 +4,13 @@ All notable changes to the "docspace" extension will be documented in this file.
 
 ## [0.0.6]
 
+### Adicionado — Onboarding e identidade visual
+- **Walkthrough** de introdução redesenhado em estilo line-art minimalista, alinhado ao ícone da extensão, com variantes para tema claro e escuro.
+- **Internacionalização** (`vscode.l10n`): inglês e português do Brasil (`pt-BR`).
+
+### Alterado
+- A pasta `docGerada/` agora pode ser **excluída** pela sidebar (vai para a lixeira, recursivo). Os arquivos gerados individuais continuam somente leitura.
+
 ### Adicionado — Integração com Notion (token manual)
 - **Conectar**: cola o Internal Integration Token nas configurações (escopo de usuário, fora do repositório); validado via `GET /v1/users/me`.
 - **Importar**: busca páginas acessíveis, seleção múltipla, converte blocos → Markdown e salva `.md` na pasta escolhida; vincula o arquivo à página.

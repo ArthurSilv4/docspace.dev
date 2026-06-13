@@ -1,8 +1,14 @@
 ﻿.vscode/**
+.claude/**
 src/**
 .gitignore
+.vscode-test.mjs
 tsconfig.json
 eslint.config.mjs
 **/*.map
 **/*.ts
+CLAUDE.md
+*.vsix
+package-lock.json
+resources/icon-marketplace.svg
 !out/**

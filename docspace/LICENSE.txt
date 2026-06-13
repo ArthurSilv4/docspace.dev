@@ -1,0 +1,34 @@
+Docspace Workspace — Proprietary License
+
+Copyright (c) 2026 Arthur De Souza Silva. All rights reserved.
+
+This software (the "Software"), including its source code, compiled binaries,
+assets, and documentation, is the proprietary property of the copyright holder.
+
+1. Grant of use
+   The copyright holder makes the Software available to end users free of
+   charge for personal and commercial use, at the copyright holder's sole
+   discretion. This permission is limited to installing and using the Software
+   as distributed (for example, through the Visual Studio Code Marketplace).
+
+2. Reservation of rights
+   The copyright holder reserves all rights not expressly granted herein,
+   including the right to modify, suspend, or revoke these terms — and to change
+   the pricing or licensing model of the Software — at any time and without
+   prior notice. Continued use after such changes is subject to the then-current
+   terms.
+
+3. Restrictions
+   Except as required by applicable law, you may not copy, modify, adapt,
+   translate, reverse engineer, decompile, redistribute, sublicense, sell, rent,
+   or create derivative works of the Software or its source code without the
+   prior written permission of the copyright holder.
+
+4. No warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING
+   FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+For licensing inquiries, contact the copyright holder.

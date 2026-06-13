@@ -3,14 +3,33 @@
   "displayName": "%displayName%",
   "description": "%description%",
   "publisher": "ArthurSilv4",
-  "version": "0.0.5",
+  "version": "0.0.6",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.120.0"
   },
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "keywords": [
+    "markdown",
+    "mermaid",
+    "excalidraw",
+    "diagram",
+    "documentation",
+    "graph",
+    "dependency",
+    "notion",
+    "preview",
+    "canvas"
+  ],
   "activationEvents": [
     "onStartupFinished"
   ],
   "categories": [
+    "Visualization",
     "Other"
   ],
   "main": "./out/extension.js",
