@@ -3,7 +3,7 @@
   "displayName": "%displayName%",
   "description": "%description%",
   "publisher": "ArthurSilv4",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "license": "SEE LICENSE IN LICENSE.txt",
   "icon": "resources/icon.png",
   "engines": {

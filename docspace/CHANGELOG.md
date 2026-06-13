@@ -2,6 +2,14 @@
 
 All notable changes to the "docspace" extension will be documented in this file.
 
+## [0.0.7] - 2026-06-13
+
+### Adicionado
+- Automação de release (`npm run release:patch`/`:minor`/`:major` + `release:finish`): bump de versão, seção de CHANGELOG, empacotamento do `.vsix`, commit e tag git.
+
+### Alterado
+- Preparação para o Marketplace: ícone PNG dedicado, categorias (Visualization), palavras-chave, licença proprietária e README reescrito.
+
 ## [0.0.6]
 
 ### Adicionado — Onboarding e identidade visual
