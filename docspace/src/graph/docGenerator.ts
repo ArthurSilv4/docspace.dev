@@ -3,11 +3,11 @@ import { GENERATED_DIR, getExclude, workspaceRoot } from '../sidebar/config.js';
 import { buildProjectGraph, GraphEdge, GraphNode, NodeRole, ProjectGraph } from './projectGraph.js';
 
 const ROLE_LABELS: Record<NodeRole, string> = {
-	entry: 'Entry points',
-	controller: 'Controllers',
-	service: 'Services',
-	repository: 'Repositories',
-	model: 'Models',
+	entry: 'Pontos de entrada',
+	controller: 'Controladores',
+	service: 'Serviços',
+	repository: 'Repositórios',
+	model: 'Modelos',
 	util: 'Utilitários',
 	other: 'Outros',
 	external: 'Externos',

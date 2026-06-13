@@ -1,7 +1,7 @@
 {
   "name": "docspace-workspace",
-  "displayName": "Docspace Workspace",
-  "description": "Visualize and manage Markdown, Mermaid diagrams and Excalidraw canvases inside VS Code.",
+  "displayName": "%displayName%",
+  "description": "%description%",
   "publisher": "ArthurSilv4",
   "version": "0.0.5",
   "engines": {
@@ -14,89 +14,95 @@
     "Other"
   ],
   "main": "./out/extension.js",
+  "l10n": "./l10n",
   "contributes": {
     "commands": [
       {
         "command": "docspace.openPreview",
-        "title": "Open Preview"
+        "title": "%command.openPreview.title%"
       },
       {
         "command": "docspace.selectDiagramTheme",
-        "title": "Change Diagram Theme",
+        "title": "%command.selectDiagramTheme.title%",
         "icon": "$(symbol-color)"
       },
       {
         "command": "docspace.configureCategory",
-        "title": "Configurar Categoria…",
+        "title": "%command.configureCategory.title%",
         "icon": "$(gear)"
       },
       {
         "command": "docspace.regenerateDoc",
-        "title": "Regenerar Doc",
+        "title": "%command.regenerateDoc.title%",
         "icon": "$(book)"
       },
       {
         "command": "docspace.selectSort",
-        "title": "Ordenar arquivos",
+        "title": "%command.selectSort.title%",
         "icon": "$(sort-precedence)"
       },
       {
         "command": "docspace.notionConnect",
-        "title": "Notion: Conectar",
+        "title": "%command.notionConnect.title%",
         "icon": "$(plug)"
       },
       {
         "command": "docspace.notionImport",
-        "title": "Notion: Importar páginas",
+        "title": "%command.notionImport.title%",
         "icon": "$(cloud-download)"
       },
       {
         "command": "docspace.notionPull",
-        "title": "Notion: Puxar (pull)"
+        "title": "%command.notionPull.title%"
       },
       {
         "command": "docspace.notionPush",
-        "title": "Notion: Enviar (push)"
+        "title": "%command.notionPush.title%"
       },
       {
         "command": "docspace.notionDisconnect",
-        "title": "Notion: Desconectar",
+        "title": "%command.notionDisconnect.title%",
         "icon": "$(debug-disconnect)"
       },
       {
         "command": "docspace.openProjectGraph",
-        "title": "Open Project Graph",
+        "title": "%command.openProjectGraph.title%",
         "icon": "$(type-hierarchy)"
       },
       {
         "command": "docspace.newMarkdown",
-        "title": "New Markdown File",
+        "title": "%command.newMarkdown.title%",
         "icon": "$(new-file)"
       },
       {
         "command": "docspace.newMermaid",
-        "title": "New Mermaid Diagram",
+        "title": "%command.newMermaid.title%",
         "icon": "$(new-file)"
       },
       {
         "command": "docspace.newExcalidraw",
-        "title": "New Canvas",
+        "title": "%command.newExcalidraw.title%",
         "icon": "$(new-file)"
       },
       {
         "command": "docspace.deleteFile",
-        "title": "Delete",
+        "title": "%command.deleteFile.title%",
         "icon": "$(trash)"
       },
       {
         "command": "docspace.renameFile",
-        "title": "Rename",
+        "title": "%command.renameFile.title%",
         "icon": "$(edit)"
       },
       {
         "command": "docspace.showWelcome",
-        "title": "Docspace: Guia de início",
+        "title": "%command.showWelcome.title%",
         "icon": "$(question)"
+      },
+      {
+        "command": "docspace.openSettings",
+        "title": "%command.openSettings.title%",
+        "icon": "$(gear)"
       }
     ],
     "menus": {
@@ -138,7 +144,7 @@
         },
         {
           "command": "docspace.deleteFile",
-          "when": "view == docspace.explorer && viewItem =~ /^(dsFile|dsFolder)$/",
+          "when": "view == docspace.explorer && viewItem =~ /^(dsFile|dsFolder|dsGenFolder)$/",
           "group": "inline"
         },
         {
@@ -149,44 +155,14 @@
       ],
       "view/title": [
         {
-          "command": "docspace.openProjectGraph",
+          "command": "docspace.openSettings",
           "when": "view == docspace.explorer",
           "group": "navigation@1"
         },
         {
-          "command": "docspace.regenerateDoc",
-          "when": "view == docspace.explorer",
-          "group": "navigation@2"
-        },
-        {
-          "command": "docspace.notionConnect",
-          "when": "view == docspace.explorer && !docspace.notionConnected",
-          "group": "navigation@3"
-        },
-        {
-          "command": "docspace.notionDisconnect",
-          "when": "view == docspace.explorer && docspace.notionConnected",
-          "group": "navigation@3"
-        },
-        {
-          "command": "docspace.notionImport",
-          "when": "view == docspace.explorer && docspace.notionConnected",
-          "group": "navigation@4"
-        },
-        {
-          "command": "docspace.selectSort",
-          "when": "view == docspace.explorer",
-          "group": "navigation@5"
-        },
-        {
-          "command": "docspace.selectDiagramTheme",
-          "when": "view == docspace.explorer",
-          "group": "navigation@6"
-        },
-        {
           "command": "docspace.showWelcome",
           "when": "view == docspace.explorer",
-          "group": "navigation@7"
+          "group": "navigation@2"
         }
       ]
     },
@@ -195,7 +171,10 @@
       "properties": {
         "docspace.docsMode": {
           "type": "string",
-          "enum": ["auto", "folder"],
+          "enum": [
+            "auto",
+            "folder"
+          ],
           "enumDescriptions": [
             "Descobre arquivos .md (e .md com Mermaid) em todo o projeto.",
             "Mostra apenas os arquivos da pasta definida em docspace.docsFolder."
@@ -210,7 +189,10 @@
         },
         "docspace.diagramsMode": {
           "type": "string",
-          "enum": ["auto", "folder"],
+          "enum": [
+            "auto",
+            "folder"
+          ],
           "enumDescriptions": [
             "Descobre arquivos .mmd e .md com blocos Mermaid em todo o projeto.",
             "Mostra apenas os arquivos da pasta definida em docspace.diagramsFolder."
@@ -225,7 +207,10 @@
         },
         "docspace.canvasMode": {
           "type": "string",
-          "enum": ["auto", "folder"],
+          "enum": [
+            "auto",
+            "folder"
+          ],
           "enumDescriptions": [
             "Descobre arquivos .excalidraw em todo o projeto.",
             "Mostra apenas os arquivos da pasta definida em docspace.canvasFolder."
@@ -252,7 +237,11 @@
         },
         "docspace.sortBy": {
           "type": "string",
-          "enum": ["name", "modified", "size"],
+          "enum": [
+            "name",
+            "modified",
+            "size"
+          ],
           "enumDescriptions": [
             "Ordem alfabética.",
             "Modificados mais recentemente primeiro.",
@@ -320,7 +309,11 @@
       {
         "viewType": "docspace.canvasEditor",
         "displayName": "Docspace Canvas",
-        "selector": [{ "filenamePattern": "*.excalidraw" }],
+        "selector": [
+          {
+            "filenamePattern": "*.excalidraw"
+          }
+        ],
         "priority": "default"
       }
     ],
@@ -344,22 +337,26 @@
     "viewsWelcome": [
       {
         "view": "docspace.explorer",
-        "contents": "Nenhum documento encontrado no workspace.\n\nCrie um arquivo para começar:\n[$(new-file) Novo Markdown](command:docspace.newMarkdown)\n[$(new-file) Novo Diagrama](command:docspace.newMermaid)\n[$(new-file) Novo Canvas](command:docspace.newExcalidraw)\n\n[$(question) Ver guia de início](command:docspace.showWelcome)"
+        "contents": "%viewsWelcome.contents%"
       }
     ],
     "walkthroughs": [
       {
         "id": "docspace.onboarding",
-        "title": "Começar com o Docspace",
-        "description": "Organize docs, diagramas e canvas do seu projeto em minutos.",
+        "title": "%walkthrough.title%",
+        "description": "%walkthrough.description%",
         "steps": [
           {
             "id": "docspace.onboarding.sidebar",
-            "title": "Suas docs em um lugar só",
-            "description": "O Docspace organiza seus arquivos em três categorias: **Docs** (`.md`), **Diagrams** (`.mmd`) e **Canvas** (`.excalidraw`).\n\nCrie seu primeiro arquivo — ele aparece na sidebar imediatamente:\n\n[$(new-file) Novo Markdown](command:docspace.newMarkdown)\n[$(new-file) Novo Diagrama](command:docspace.newMermaid)\n[$(new-file) Novo Canvas](command:docspace.newExcalidraw)",
+            "title": "%walkthrough.step.sidebar.title%",
+            "description": "%walkthrough.step.sidebar.description%",
             "media": {
-              "image": "media/walkthrough/sidebar.svg",
-              "altText": "Sidebar do Docspace mostrando categorias Docs, Diagrams e Canvas com arquivos"
+              "image": {
+                "dark": "media/walkthrough/sidebar-dark.svg",
+                "light": "media/walkthrough/sidebar-light.svg",
+                "hc": "media/walkthrough/sidebar-dark.svg"
+              },
+              "altText": "%walkthrough.step.sidebar.altText%"
             },
             "completionEvents": [
               "onCommand:docspace.newMarkdown",
@@ -369,11 +366,15 @@
           },
           {
             "id": "docspace.onboarding.preview",
-            "title": "Preview de Markdown e Mermaid",
-            "description": "Clique num arquivo `.md` ou `.mmd` na sidebar para abrir o preview ao lado.\n\nEmbeds funcionam diretamente no Markdown:\n- `![[diagrama.mmd]]` renderiza o diagrama inline\n- `![[canvas.excalidraw]]` renderiza o canvas como SVG\n\n[$(open-preview) Abrir Preview](command:docspace.openPreview)",
+            "title": "%walkthrough.step.preview.title%",
+            "description": "%walkthrough.step.preview.description%",
             "media": {
-              "image": "media/walkthrough/preview.svg",
-              "altText": "Preview split-view mostrando Markdown à esquerda e conteúdo renderizado à direita"
+              "image": {
+                "dark": "media/walkthrough/preview-dark.svg",
+                "light": "media/walkthrough/preview-light.svg",
+                "hc": "media/walkthrough/preview-dark.svg"
+              },
+              "altText": "%walkthrough.step.preview.altText%"
             },
             "completionEvents": [
               "onCommand:docspace.openPreview"
@@ -381,11 +382,15 @@
           },
           {
             "id": "docspace.onboarding.graph",
-            "title": "Mapa visual do projeto",
-            "description": "O **Project Graph** varre seu código e exibe as dependências entre arquivos de forma interativa.\n\nTrês modos de visualização:\n- **Dependências** — rede de imports (force-layout)\n- **Fluxo** — swimlanes por papel arquitetural\n- **Impacto** — clique num arquivo e veja quem seria afetado\n\n[$(type-hierarchy) Abrir Project Graph](command:docspace.openProjectGraph)",
+            "title": "%walkthrough.step.graph.title%",
+            "description": "%walkthrough.step.graph.description%",
             "media": {
-              "image": "media/walkthrough/graph.svg",
-              "altText": "Grafo de dependências com nós coloridos por pasta e arestas de import"
+              "image": {
+                "dark": "media/walkthrough/graph-dark.svg",
+                "light": "media/walkthrough/graph-light.svg",
+                "hc": "media/walkthrough/graph-dark.svg"
+              },
+              "altText": "%walkthrough.step.graph.altText%"
             },
             "completionEvents": [
               "onCommand:docspace.openProjectGraph"
@@ -393,11 +398,15 @@
           },
           {
             "id": "docspace.onboarding.generate",
-            "title": "Documentação automática",
-            "description": "Clique no ícone **📖** na barra do Docspace para gerar automaticamente uma pasta `docGerada/` com:\n\n- `index.md` — visão geral + diff vs. geração anterior\n- `estrutura.md` — arquivos agrupados por papel\n- `dependencias.md` — imports por arquivo\n- `acoplamento.md` — ranking de acoplamento\n- `fluxos.md` — caminhos a partir dos entry points\n\n[$(book) Gerar documentação agora](command:docspace.regenerateDoc)",
+            "title": "%walkthrough.step.generate.title%",
+            "description": "%walkthrough.step.generate.description%",
             "media": {
-              "image": "media/walkthrough/generate.svg",
-              "altText": "Pasta docGerada com arquivos de documentação gerada e preview do index.md"
+              "image": {
+                "dark": "media/walkthrough/generate-dark.svg",
+                "light": "media/walkthrough/generate-light.svg",
+                "hc": "media/walkthrough/generate-dark.svg"
+              },
+              "altText": "%walkthrough.step.generate.altText%"
             },
             "completionEvents": [
               "onCommand:docspace.regenerateDoc"
@@ -413,12 +422,14 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "l10n:extract": "npx @vscode/l10n-dev export --outDir ./l10n ./src"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@types/vscode": "^1.120.0",
+    "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.39.3",

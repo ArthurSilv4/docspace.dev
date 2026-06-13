@@ -71,12 +71,12 @@
       const raw = embeds[name];
       if (raw === undefined) {
         holder.className = 'embed-missing';
-        holder.textContent = `![[${name}]] — arquivo não encontrado`;
+        holder.textContent = window.L.embedNotFound.replace('{0}', `![[${name}]]`);
         continue;
       }
       if (!utils) {
         holder.className = 'embed-missing';
-        holder.textContent = `![[${name}]] — não foi possível carregar o renderizador`;
+        holder.textContent = window.L.embedNoRenderer.replace('{0}', `![[${name}]]`);
         continue;
       }
       try {
@@ -92,7 +92,7 @@
         holder.appendChild(svg);
       } catch (err) {
         holder.className = 'embed-missing';
-        holder.textContent = `![[${name}]] — erro ao renderizar: ${err instanceof Error ? err.message : String(err)}`;
+        holder.textContent = window.L.embedRenderError.replace('{0}', `![[${name}]]`).replace('{1}', err instanceof Error ? err.message : String(err));
       }
     }
   }
@@ -103,7 +103,7 @@
       if (name.endsWith('.mmd')) {
         const body = embeds[name];
         return body === undefined
-          ? `<div class="embed-missing">![[${escapeHtml(name)}]] — arquivo não encontrado</div>`
+          ? `<div class="embed-missing">${escapeHtml(window.L.embedNotFound.replace('{0}', `![[${name}]]`))}</div>`
           : `<pre class="mermaid">${escapeHtml(body)}</pre>`;
       }
       return `<div class="excalidraw-embed" data-name="${escapeAttr(name)}"></div>`;
@@ -149,7 +149,7 @@
     nav.className = 'toc';
     const title = document.createElement('div');
     title.className = 'toc-title';
-    title.textContent = 'Sumário';
+    title.textContent = window.L.toc;
     nav.appendChild(title);
     const ul = document.createElement('ul');
     for (const h of headings) {
@@ -183,16 +183,16 @@
       if (!code) { continue; }
       const btn = document.createElement('button');
       btn.className = 'copy-btn';
-      btn.textContent = 'Copiar';
-      btn.title = 'Copiar código';
+      btn.textContent = window.L.copy;
+      btn.title = window.L.copyTitle;
       btn.addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(code.textContent || '');
-          btn.textContent = 'Copiado!';
+          btn.textContent = window.L.copied;
         } catch {
-          btn.textContent = 'Falhou';
+          btn.textContent = window.L.copyFailed;
         }
-        setTimeout(() => { btn.textContent = 'Copiar'; }, 1200);
+        setTimeout(() => { btn.textContent = window.L.copy; }, 1200);
       });
       pre.appendChild(btn);
     }

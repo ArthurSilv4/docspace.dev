@@ -22,8 +22,8 @@ async function pickTargetFolder(): Promise<vscode.Uri | undefined> {
 		canSelectFiles: false,
 		canSelectFolders: true,
 		canSelectMany: false,
-		openLabel: 'Salvar aqui',
-		title: 'Docspace — onde salvar o arquivo?',
+		openLabel: vscode.l10n.t('Save here'),
+		title: vscode.l10n.t('Docspace — where to save the file?'),
 		defaultUri: workspaceRoot(),
 	});
 	return picked?.[0];
@@ -51,7 +51,7 @@ async function createFile(
 	const input = await vscode.window.showInputBox({
 		prompt,
 		value: `untitled.${ext}`,
-		validateInput: (v) => v.trim() ? null : 'Name cannot be empty',
+		validateInput: (v) => v.trim() ? null : vscode.l10n.t('Name cannot be empty'),
 	});
 	if (!input) { return; }
 
@@ -163,26 +163,30 @@ function registerCommands(context: vscode.ExtensionContext, provider: DocspacePr
 		),
 		vscode.commands.registerCommand('docspace.regenerateDoc', () => regenerateDoc(context, provider)),
 		vscode.commands.registerCommand('docspace.newMarkdown', (item?: WorkspaceTreeItem) =>
-			createFile(item, 'md', (n) => `# ${n.replace(/\.md$/, '')}\n`, 'Markdown filename', onCreated)
+			createFile(item, 'md', (n) => `# ${n.replace(/\.md$/, '')}\n`,
+				vscode.l10n.t('Markdown filename'), onCreated)
 		),
 		vscode.commands.registerCommand('docspace.newMermaid', (item?: WorkspaceTreeItem) =>
-			createFile(item, 'mmd', () => 'graph TD\n    A --> B\n', 'Mermaid filename', onCreated)
+			createFile(item, 'mmd', () => 'graph TD\n    A --> B\n',
+				vscode.l10n.t('Mermaid filename'), onCreated)
 		),
 		vscode.commands.registerCommand('docspace.newExcalidraw', (item?: WorkspaceTreeItem) =>
 			createFile(item, 'excalidraw', () => JSON.stringify({
 				type: 'excalidraw', version: 2, source: 'docspace', elements: [],
 				appState: { gridSize: 20 }, files: {},
-			}, null, 2), 'Canvas filename', onCreated)
+			}, null, 2), vscode.l10n.t('Canvas filename'), onCreated)
 		),
 		vscode.commands.registerCommand('docspace.deleteFile', async (item?: WorkspaceTreeItem) => {
-			if (!item?.uri || item.kind === 'genFile' || item.kind === 'genFolder') { return; }
+			if (!item?.uri || item.kind === 'genFile') { return; }
 			const name = path.basename(item.uri.fsPath);
+			const label = vscode.l10n.t('Delete');
 			const confirm = await vscode.window.showWarningMessage(
-				`Delete ${name}?`, { modal: true }, 'Delete'
+				vscode.l10n.t('Delete {0}?', name), { modal: true }, label
 			);
-			if (confirm === 'Delete') {
+			if (confirm === label) {
 				await vscode.workspace.fs.delete(item.uri, { recursive: true, useTrash: true });
-				provider.invalidate(item.uri);
+				if (item.kind === 'genFolder') { provider.refreshAll(); }
+				else { provider.invalidate(item.uri); }
 			}
 		}),
 		vscode.commands.registerCommand('docspace.renameFile', async (item?: WorkspaceTreeItem) => {
@@ -191,9 +195,9 @@ function registerCommands(context: vscode.ExtensionContext, provider: DocspacePr
 			const oldName = path.basename(oldUri.fsPath);
 			const ext = path.extname(oldName);
 			const input = await vscode.window.showInputBox({
-				prompt: 'New name',
+				prompt: vscode.l10n.t('New name'),
 				value: oldName,
-				validateInput: (v) => v.trim() ? null : 'Name cannot be empty',
+				validateInput: (v) => v.trim() ? null : vscode.l10n.t('Name cannot be empty'),
 			});
 			if (!input || input === oldName) { return; }
 			const newName = input.endsWith(ext) ? input : `${input}${ext}`;
@@ -202,7 +206,7 @@ function registerCommands(context: vscode.ExtensionContext, provider: DocspacePr
 			edit.renameFile(oldUri, newUri, { overwrite: false });
 			const ok = await vscode.workspace.applyEdit(edit);
 			if (!ok) {
-				vscode.window.showErrorMessage('Falha ao renomear o arquivo.');
+				vscode.window.showErrorMessage(vscode.l10n.t('Failed to rename file.'));
 			}
 		}),
 	);
@@ -212,14 +216,17 @@ async function selectDiagramTheme(): Promise<void> {
 	const current = vscode.workspace.getConfiguration('docspace').get<string>('diagramTheme', 'auto');
 	const picked = await vscode.window.showQuickPick(
 		[
-			{ label: '$(color-mode) Auto',    description: 'Segue o tema do VS Code (claro → default, escuro → dark)', value: 'auto' },
-			{ label: '$(symbol-color) Default', description: 'Tema padrão do Mermaid',          value: 'default' },
-			{ label: '$(moon) Dark',           description: 'Tema escuro',                       value: 'dark' },
-			{ label: '$(tree) Forest',         description: 'Tema floresta (tons de verde)',      value: 'forest' },
-			{ label: '$(circle-outline) Neutral', description: 'Tema neutro (tons de cinza)',    value: 'neutral' },
-			{ label: '$(paintcan) Base',       description: 'Tema base personalizável',          value: 'base' },
+			{ label: '$(color-mode) Auto',           description: vscode.l10n.t('Follows the VS Code theme (light → default, dark → dark)'), value: 'auto' },
+			{ label: '$(symbol-color) Default',      description: vscode.l10n.t('Mermaid default theme'),        value: 'default' },
+			{ label: '$(moon) Dark',                 description: vscode.l10n.t('Dark theme'),                   value: 'dark' },
+			{ label: '$(tree) Forest',               description: vscode.l10n.t('Forest theme (green tones)'),   value: 'forest' },
+			{ label: '$(circle-outline) Neutral',    description: vscode.l10n.t('Neutral theme (grey tones)'),   value: 'neutral' },
+			{ label: '$(paintcan) Base',             description: vscode.l10n.t('Customizable base theme'),      value: 'base' },
 		],
-		{ title: 'Docspace — tema dos diagramas', placeHolder: `Atual: ${current}` }
+		{
+			title: vscode.l10n.t('Docspace — diagram theme'),
+			placeHolder: vscode.l10n.t('Current: {0}', current),
+		}
 	);
 	if (picked) {
 		await vscode.workspace.getConfiguration('docspace').update(
@@ -232,11 +239,14 @@ async function selectSort(): Promise<void> {
 	const current = vscode.workspace.getConfiguration('docspace').get<string>('sortBy', 'name');
 	const picked = await vscode.window.showQuickPick(
 		[
-			{ label: '$(case-sensitive) Nome', description: 'Ordem alfabética', value: 'name' },
-			{ label: '$(history) Modificação', description: 'Modificados mais recentemente primeiro', value: 'modified' },
-			{ label: '$(symbol-ruler) Tamanho', description: 'Maiores primeiro', value: 'size' },
+			{ label: vscode.l10n.t('$(case-sensitive) Name'),     description: vscode.l10n.t('Alphabetical order'),           value: 'name' },
+			{ label: vscode.l10n.t('$(history) Modified'),        description: vscode.l10n.t('Most recently modified first'), value: 'modified' },
+			{ label: vscode.l10n.t('$(symbol-ruler) Size'),       description: vscode.l10n.t('Largest first'),                value: 'size' },
 		],
-		{ title: 'Docspace — ordenar arquivos', placeHolder: `Atual: ${current}` }
+		{
+			title: vscode.l10n.t('Docspace — sort files'),
+			placeHolder: vscode.l10n.t('Current: {0}', current),
+		}
 	);
 	if (picked) {
 		await vscode.workspace.getConfiguration('docspace').update('sortBy', picked.value, configTarget());
@@ -249,13 +259,26 @@ async function configureCategory(item?: WorkspaceTreeItem): Promise<void> {
 	if (!key) { return; }
 
 	const { mode, folder } = getCategoryConfig(key);
-	const currentLabel = mode === 'auto' ? 'Automático' : `Pasta (${folder || '—'})`;
+	const currentLabel = mode === 'auto'
+		? vscode.l10n.t('Automatic')
+		: vscode.l10n.t('Folder ({0})', folder || '—');
 	const picked = await vscode.window.showQuickPick(
 		[
-			{ label: '$(search) Automático', description: `Detecta os arquivos de ${CATEGORY_LABELS[key]} no projeto inteiro`, value: 'auto' },
-			{ label: '$(folder-opened) Escolher pasta…', description: 'Mostra apenas os arquivos de uma pasta específica', value: 'folder' },
+			{
+				label: vscode.l10n.t('$(search) Automatic'),
+				description: vscode.l10n.t('Discovers {0} files across the entire project', CATEGORY_LABELS[key]),
+				value: 'auto',
+			},
+			{
+				label: vscode.l10n.t('$(folder-opened) Choose folder…'),
+				description: vscode.l10n.t('Shows only files inside a specific folder'),
+				value: 'folder',
+			},
 		],
-		{ title: `Docspace — categoria ${CATEGORY_LABELS[key]}`, placeHolder: `Atual: ${currentLabel}` }
+		{
+			title: vscode.l10n.t('Docspace — {0} category', CATEGORY_LABELS[key]),
+			placeHolder: vscode.l10n.t('Current: {0}', currentLabel),
+		}
 	);
 	if (!picked) { return; }
 
@@ -277,8 +300,8 @@ async function pickCategoryFolder(key: CategoryKey): Promise<string | undefined>
 		canSelectFiles: false,
 		canSelectFolders: true,
 		canSelectMany: false,
-		openLabel: 'Usar esta pasta',
-		title: `Docspace — pasta da categoria ${CATEGORY_LABELS[key]}`,
+		openLabel: vscode.l10n.t('Use this folder'),
+		title: vscode.l10n.t('Docspace — {0} category folder', CATEGORY_LABELS[key]),
 		defaultUri: resolveCategoryRoot(key) ?? workspaceRoot(),
 	});
 	if (!picked?.[0]) { return undefined; }
@@ -297,16 +320,55 @@ async function regenerateDoc(
 ): Promise<void> {
 	try {
 		await vscode.window.withProgress(
-			{ location: vscode.ProgressLocation.Notification, title: 'Docspace: gerando documentação…' },
+			{ location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Docspace: generating documentation…') },
 			() => generateProjectDocs(context)
 		);
 		provider.refreshAll();
-		vscode.window.showInformationMessage('Docspace: documentação gerada em docGerada/.');
+		vscode.window.showInformationMessage(vscode.l10n.t('Docspace: documentation generated in docGerada/.'));
 	} catch (err) {
 		vscode.window.showErrorMessage(
-			`Docspace: falha ao gerar documentação — ${err instanceof Error ? err.message : String(err)}`
+			vscode.l10n.t('Docspace: failed to generate documentation — {0}', err instanceof Error ? err.message : String(err))
 		);
 	}
+}
+
+async function openSettingsMenu(): Promise<void> {
+	const isConnected = !!vscode.workspace.getConfiguration('docspace').get<string>('notionToken', '').trim();
+
+	type MenuItem = vscode.QuickPickItem & { run: () => void };
+	const items: MenuItem[] = [
+		{
+			label: `$(type-hierarchy) ${vscode.l10n.t('Open Project Graph')}`,
+			run: () => { void vscode.commands.executeCommand('docspace.openProjectGraph'); },
+		},
+		{
+			label: `$(book) ${vscode.l10n.t('Regenerate Docs')}`,
+			run: () => { void vscode.commands.executeCommand('docspace.regenerateDoc'); },
+		},
+		{ label: '', kind: vscode.QuickPickItemKind.Separator, run: () => {} },
+		{
+			label: `$(sort-precedence) ${vscode.l10n.t('Sort Files')}`,
+			run: () => { void vscode.commands.executeCommand('docspace.selectSort'); },
+		},
+		{
+			label: `$(symbol-color) ${vscode.l10n.t('Change Diagram Theme')}`,
+			run: () => { void vscode.commands.executeCommand('docspace.selectDiagramTheme'); },
+		},
+		{ label: '', kind: vscode.QuickPickItemKind.Separator, run: () => {} },
+		isConnected
+			? { label: `$(cloud-download) ${vscode.l10n.t('Notion: Import Pages')}`, run: () => { void vscode.commands.executeCommand('docspace.notionImport'); } }
+			: { label: `$(plug) ${vscode.l10n.t('Notion: Connect')}`, run: () => { void vscode.commands.executeCommand('docspace.notionConnect'); } },
+		...(isConnected ? [{
+			label: `$(debug-disconnect) ${vscode.l10n.t('Notion: Disconnect')}`,
+			run: () => { void vscode.commands.executeCommand('docspace.notionDisconnect'); },
+		}] : []),
+	];
+
+	const picked = await vscode.window.showQuickPick(items, {
+		title: vscode.l10n.t('Docspace'),
+		placeHolder: vscode.l10n.t('Choose an action…'),
+	});
+	picked?.run();
 }
 
 const WALKTHROUGH_ID = 'ArthurSilv4.docspace-workspace#docspace.onboarding';
@@ -314,7 +376,6 @@ const WALKTHROUGH_ID = 'ArthurSilv4.docspace-workspace#docspace.onboarding';
 function openWalkthrough(): void {
 	void vscode.commands.executeCommand('workbench.action.openWalkthrough', WALKTHROUGH_ID);
 }
-
 
 export function activate(context: vscode.ExtensionContext): void {
 	const provider = new DocspaceProvider();
@@ -331,6 +392,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		CanvasEditorProvider.register(context),
 		vscode.window.registerTreeDataProvider('docspace.explorer', provider),
 		vscode.commands.registerCommand('docspace.showWelcome', openWalkthrough),
+		vscode.commands.registerCommand('docspace.openSettings', () => openSettingsMenu()),
 	);
 
 	registerCommands(context, provider);

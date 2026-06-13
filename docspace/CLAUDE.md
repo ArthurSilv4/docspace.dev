@@ -15,11 +15,6 @@ docspace/
 │   │   ├── docGenerator.ts        # generateProjectDocs() — writes read-only docGerada/ from the graph
 │   │   ├── graphPanel.ts          # GraphPanel — project graph webview (Cytoscape.js), themes
 │   │   └── projectGraph.ts        # buildProjectGraph(), extractImports(), detectRole(), 2-layer cache
-│   ├── mcp/
-│   │   ├── graphBuilder.ts        # Standalone graph builder (pure fs — no VS Code API, used by MCP server)
-│   │   ├── server.ts              # MCP stdio server — Content-Length framing, JSON-RPC 2.0
-│   │   ├── setup.ts               # Harness picker (QuickPick) — configures MCP in external AI clients
-│   │   └── tools.ts               # MCP tool definitions and handlers (dispatched by server.ts)
 │   ├── notion/
 │   │   ├── notion.ts              # NotionManager — connect/import/pull/push, polling, decoration badge
 │   │   ├── notionClient.ts        # NotionClient — REST over Node https (search, blockTree, replaceContent)
@@ -44,6 +39,7 @@ docspace/
 │   ├── graph.js                   # Webview JS: 3 graph modes, themes, swimlanes, impact, search/filter
 │   ├── graph.css                  # Webview CSS: toolbar, lane overlay, canvas
 │   └── walkthrough/               # SVG illustrations for the onboarding walkthrough steps
+├── l10n/                          # Translated string bundles (VS Code l10n)
 ├── resources/
 │   └── icon.svg                   # Activity Bar icon
 ├── out/                           # Compiled JS output (gitignored)
@@ -61,6 +57,7 @@ npm run compile    # Compile TypeScript → out/
 npm run watch      # Compile on file changes (keep running during development)
 npm run lint       # Run ESLint on src/ (warns on cyclomatic complexity > 10)
 npm run test       # Compile + lint + run tests via vscode-test
+npm run l10n:extract  # Extract l10n strings from src/ into l10n/
 ```
 
 **Debug/run in VS Code:** Press `F5` from the `docspace/` folder — launches an Extension Development Host window with the extension loaded.
@@ -83,7 +80,7 @@ Creating files: right-click menus per category (`dsCat_docs` → newMarkdown etc
 
 ### Generated docs (`docGerada/`)
 
-`docspace.regenerateDoc` (book icon in the panel header) runs `generateProjectDocs(context)` (`src/graph/docGenerator.ts`): builds the project graph and writes `index.md` (links to all generated docs + a structural diff vs. the previous run), `estrutura.md` (files grouped by detected role), `dependencias.md` (per-file imports + packages), `acoplamento.md` (coupling ranking table), `fluxos.md` (execution paths from entry points) into `docGerada/` at the workspace root, each headed with the generation date. The previous run's structural snapshot (`{files, couplings}`) is persisted in `context.globalState` keyed by workspace path; `diffSnapshots` produces added/removed files and couplings (pure data comparison, no AI). The folder shows pinned at the top of the Docs category with a `sparkle` icon; `index.md` is pinned first among generated files; its files use kind `genFile` (contextValues `dsGenFolder`/`dsGenFile` keep rename/delete/new menus away, and the commands also guard against those kinds). The normal scan excludes `docGerada` (see `DocspaceProvider.scanExclude`).
+`docspace.regenerateDoc` (book icon in the panel header) runs `generateProjectDocs(context)` (`src/graph/docGenerator.ts`): builds the project graph and writes `index.md` (links to all generated docs + a structural diff vs. the previous run), `estrutura.md` (files grouped by detected role), `dependencias.md` (per-file imports + packages), `acoplamento.md` (coupling ranking table), `fluxos.md` (execution paths from entry points) into `docGerada/` at the workspace root, each headed with the generation date. The previous run's structural snapshot (`{files, couplings}`) is persisted in `context.globalState` keyed by workspace path; `diffSnapshots` produces added/removed files and couplings (pure data comparison, no AI). The folder shows pinned at the top of the Docs category with a `sparkle` icon; `index.md` is pinned first among generated files; its files use kind `genFile` (contextValue `dsGenFile`) which stays fully read-only — no rename/delete/new menus, and the commands guard against the `genFile` kind. The generated folder itself (kind `genFolder`, contextValue `dsGenFolder`) can be **deleted** (the `deleteFile` command + inline trash menu accept `dsGenFolder`; deletion is recursive, to trash, then `provider.refreshAll()`), but not renamed (rename still guards `genFolder`). The normal scan excludes `docGerada` (see `DocspaceProvider.scanExclude`).
 
 Category items carry a **badge** (`item.description` = relevant file count via `countRelevantFiles`). Files are sorted by `docspace.sortBy` (`name`/`modified`/`size`; modified & size stat each file); the `docspace.selectSort` command (sort icon in header) picks it.
 
@@ -141,3 +138,20 @@ Manual-token approach (no OAuth, no embedded secret): the user pastes an Interna
 ### Tests
 
 Mocha + `@vscode/test-cli`. Test files must match `**/*.test.ts` (compiled to `out/**/*.test.js`) to be discovered.
+
+### Localization (i18n)
+
+Every user-visible string must exist in both English and PT-BR. There are three layers:
+
+**TypeScript (`src/`)** — use `vscode.l10n.t('English string')` (or with args: `vscode.l10n.t('Delete {0}?', name)`). Then add the PT-BR translation to `l10n/bundle.l10n.pt-BR.json`:
+```json
+"English string": "String em português"
+```
+
+**`package.json` manifest strings** (command titles, viewsWelcome, walkthrough content) — use `%key%` placeholders:
+- Add the English value to `package.nls.json`: `"key": "English value"`
+- Add the PT-BR value to `package.nls.pt-BR.json`: `"key": "Valor em português"`
+
+**Webview JS (`media/*.js`)** — strings come from `window.L`, injected by the extension host via `buildWindowL()` in `graphPanel.ts` or `previewPanel.ts`. Never hardcode user-visible strings directly in JS files. Add new keys to `buildWindowL()` using `vscode.l10n.t()`, then add the PT-BR translation to `l10n/bundle.l10n.pt-BR.json`.
+
+Run `npm run l10n:extract` after adding new `vscode.l10n.t()` calls to regenerate `l10n/bundle.l10n.json` (the source-of-truth key list).

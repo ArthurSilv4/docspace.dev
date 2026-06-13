@@ -1,0 +1,46 @@
+<svg viewBox="0 0 600 320" width="600" height="320" xmlns="http://www.w3.org/2000/svg" font-family="system-ui,-apple-system,Segoe UI,sans-serif">
+  <rect width="600" height="320" fill="#1e1e1e"/>
+
+  <!-- card -->
+  <rect x="60" y="44" width="480" height="232" rx="12" fill="#252526" stroke="#3c3c3c" stroke-width="1"/>
+
+  <!-- divider + accent handle -->
+  <line x1="300" y1="44" x2="300" y2="276" stroke="#3c3c3c" stroke-width="1"/>
+  <rect x="297" y="146" width="6" height="28" rx="3" fill="#3794ff"/>
+
+  <!-- ── left: editor ── -->
+  <rect x="80" y="64" width="110" height="22" rx="6" fill="none" stroke="#3c3c3c" stroke-width="1"/>
+  <text x="94" y="79" fill="#858585" font-size="11" font-family="monospace">doc.md</text>
+
+  <!-- markdown source as abstract lines -->
+  <rect x="84" y="104" width="120" height="7" rx="3.5" fill="#3794ff"/>
+  <rect x="84" y="124" width="170" height="5" rx="2.5" fill="#858585"/>
+  <rect x="84" y="138" width="140" height="5" rx="2.5" fill="#858585"/>
+  <rect x="84" y="162" width="84" height="6" rx="3" fill="#d4d4d4"/>
+  <circle cx="88" cy="186" r="2.5" fill="#858585"/>
+  <rect x="98" y="183" width="150" height="5" rx="2.5" fill="#858585"/>
+  <circle cx="88" cy="204" r="2.5" fill="#858585"/>
+  <rect x="98" y="201" width="120" height="5" rx="2.5" fill="#858585"/>
+  <rect x="84" y="232" width="96" height="5" rx="2.5" fill="#3794ff"/>
+
+  <!-- ── right: rendered preview ── -->
+  <rect x="320" y="64" width="110" height="22" rx="6" fill="none" stroke="#3c3c3c" stroke-width="1"/>
+  <text x="334" y="79" fill="#858585" font-size="11">Preview</text>
+
+  <rect x="320" y="102" width="140" height="9" rx="4" fill="#d4d4d4"/>
+  <rect x="320" y="124" width="180" height="5" rx="2.5" fill="#858585"/>
+  <rect x="320" y="138" width="150" height="5" rx="2.5" fill="#858585"/>
+
+  <!-- rendered mini node diagram -->
+  <rect x="334" y="172" width="74" height="32" rx="7" fill="none" stroke="#3794ff" stroke-width="1.6"/>
+  <rect x="432" y="172" width="74" height="32" rx="7" fill="none" stroke="#858585" stroke-width="1.6"/>
+  <line x1="408" y1="188" x2="428" y2="188" stroke="#858585" stroke-width="1.6" marker-end="url(#ad)"/>
+  <rect x="383" y="224" width="74" height="32" rx="7" fill="none" stroke="#858585" stroke-width="1.6"/>
+  <path d="M469 204 Q469 224 457 232" fill="none" stroke="#858585" stroke-width="1.6" marker-end="url(#ad)"/>
+
+  <defs>
+    <marker id="ad" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#858585"/>
+    </marker>
+  </defs>
+</svg>

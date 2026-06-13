@@ -41,7 +41,7 @@ export class GraphPanel {
 
 		const panel = vscode.window.createWebviewPanel(
 			'docspaceGraph',
-			'Project Graph',
+			vscode.l10n.t('Project Graph'),
 			vscode.ViewColumn.One,
 			{
 				enableScripts: true,
@@ -130,19 +130,21 @@ export class GraphPanel {
 	private async saveExport(ext: 'png' | 'svg', bytes: Uint8Array): Promise<void> {
 		const root = workspaceRoot();
 		const target = await vscode.window.showSaveDialog({
-			title: 'Exportar grafo',
+			title: vscode.l10n.t('Export graph'),
 			defaultUri: root ? vscode.Uri.joinPath(root, `project-graph.${ext}`) : undefined,
-			filters: ext === 'png' ? { 'Imagem PNG': ['png'] } : { 'Imagem SVG': ['svg'] },
+			filters: ext === 'png'
+				? { [vscode.l10n.t('PNG image')]: ['png'] }
+				: { [vscode.l10n.t('SVG image')]: ['svg'] },
 		});
 		if (!target) { return; }
 		await vscode.workspace.fs.writeFile(target, bytes);
-		vscode.window.showInformationMessage(`Docspace: grafo exportado para ${path.basename(target.fsPath)}.`);
+		vscode.window.showInformationMessage(vscode.l10n.t('Docspace: graph exported to {0}.', path.basename(target.fsPath)));
 	}
 
 	private async sendGraph(): Promise<void> {
 		const wsFolders = vscode.workspace.workspaceFolders ?? [];
 		if (!wsFolders.length) {
-			await this.panel.webview.postMessage({ type: 'error', message: 'No workspace open.' });
+			await this.panel.webview.postMessage({ type: 'error', message: vscode.l10n.t('No workspace open.') });
 			return;
 		}
 		try {
@@ -161,71 +163,106 @@ export class GraphPanel {
 		} catch (err) {
 			await this.panel.webview.postMessage({
 				type: 'error',
-				message: `Failed to build graph: ${err instanceof Error ? err.message : String(err)}`,
+				message: vscode.l10n.t('Failed to build graph: {0}', err instanceof Error ? err.message : String(err)),
 			});
 		}
+	}
+
+	/** Build the localized strings object injected as window.L for graph.js. */
+	private buildWindowL(): string {
+		return JSON.stringify({
+			laneEntry:      vscode.l10n.t('Entry points'),
+			laneController: vscode.l10n.t('Controllers'),
+			laneService:    vscode.l10n.t('Services'),
+			laneRepository: vscode.l10n.t('Repositories'),
+			laneModel:      vscode.l10n.t('Models'),
+			laneUtil:       vscode.l10n.t('Utils'),
+			laneOther:      vscode.l10n.t('Other'),
+			laneExternal:   vscode.l10n.t('External'),
+			statsFormat:    vscode.l10n.t('{0} files · {1} modules · {2} connections'),
+			trailStat:      vscode.l10n.t('Trail of {0}: {1} files'),
+			impactStat:     vscode.l10n.t('{0} file(s) affected by changes in {1}'),
+			noClusters:     vscode.l10n.t('No folder with {0}+ files to cluster'),
+			rebuilding:     vscode.l10n.t('Rebuilding project graph…'),
+			renderError:    vscode.l10n.t('Error rendering graph: {0}'),
+			noImportDetail: vscode.l10n.t('no import detail'),
+			detailClose:    vscode.l10n.t('Close'),
+			colorRemove:    vscode.l10n.t('remove'),
+			paintLabels: {
+				'#f7768e': vscode.l10n.t('do not touch'),
+				'#e0af68': vscode.l10n.t('tech debt'),
+				'#9ece6a': vscode.l10n.t('ok'),
+				'#7aa2f7': vscode.l10n.t('review'),
+				'#bb9af7': vscode.l10n.t('refactor'),
+				'#6b7089': vscode.l10n.t('neutral'),
+			},
+		});
 	}
 
 	private buildHtml(): string {
 		const webview = this.panel.webview;
 		const cssUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'graph.css'));
-		const jsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'graph.js'));
+		const jsUri  = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'graph.js'));
+
+		const t = (s: string) => vscode.l10n.t(s);
+		const tp = (s: string, p: string) => vscode.l10n.t(s, p);
 
 		return /* html */`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} https://cdn.jsdelivr.net; img-src ${webview.cspSource} data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'unsafe-inline' ${webview.cspSource} https://cdn.jsdelivr.net; img-src ${webview.cspSource} data:;">
   <link rel="stylesheet" href="${cssUri}">
-  <title>Project Graph</title>
+  <title>${t('Project Graph')}</title>
 </head>
 <body>
   <div class="toolbar">
     <div class="toolbar-row">
-      <div class="segmented" role="group" aria-label="Graph mode">
-        <button id="mode-deps" class="active" title="Rede de imports entre arquivos">Dependências</button>
-        <button id="mode-flow" title="Camadas top→down por papel detectado">Fluxo</button>
-        <button id="mode-impact" title="Clique num arquivo e veja quem seria afetado">Impacto</button>
+      <div class="segmented" role="group" aria-label="${t('Graph mode')}">
+        <button id="mode-deps" class="active" title="${t('Network of imports between files')}">${t('Dependencies')}</button>
+        <button id="mode-flow" title="${t('Top-down layers by detected role')}">${t('Flow')}</button>
+        <button id="mode-impact" title="${t('Click a file to see what would be affected')}">${t('Impact')}</button>
       </div>
-      <input id="search" type="search" placeholder="Buscar arquivo… (Enter aproxima)" aria-label="Search nodes">
+      <input id="search" type="search" placeholder="${t('Search file… (Enter zooms)')}" aria-label="${t('Search nodes')}">
       <span id="stats" class="stats"></span>
-      <button id="fit" title="Ajustar à tela">Fit</button>
-      <button id="refresh" title="Reconstruir o grafo">Refresh</button>
+      <button id="fit" title="${t('Fit to screen')}">Fit</button>
+      <button id="refresh" title="${t('Rebuild the graph')}">Refresh</button>
     </div>
     <div class="toolbar-row toolbar-filters">
-      <select id="folder-filter" aria-label="Filter by folder">
-        <option value="">Todas as pastas</option>
+      <select id="folder-filter" aria-label="${t('Filter by folder')}">
+        <option value="">${t('All folders')}</option>
       </select>
-      <select id="type-filter" aria-label="Filter by type">
-        <option value="all">Arquivos + módulos</option>
-        <option value="files">Só arquivos</option>
+      <select id="type-filter" aria-label="${t('Filter by type')}">
+        <option value="all">${t('Files + modules')}</option>
+        <option value="files">${t('Files only')}</option>
       </select>
-      <label class="check" title="Oculta arquivos .test. / .spec.">
-        <input id="hide-tests" type="checkbox"> sem testes
+      <label class="check" title="${t('Hide .test. / .spec. files')}">
+        <input id="hide-tests" type="checkbox"> ${t('no tests')}
       </label>
-      <select id="theme-select" aria-label="Tema do grafo" title="Tema do grafo">
-        <option value="auto">Tema: auto</option>
-        <option value="obsidian">Tema: obsidian</option>
-        <option value="blueprint">Tema: blueprint</option>
-        <option value="pastel">Tema: pastel</option>
-        <option value="high-contrast">Tema: high-contrast</option>
+      <select id="theme-select" aria-label="${t('Graph theme')}" title="${t('Graph theme')}">
+        <option value="auto">${tp('Theme: {0}', 'auto')}</option>
+        <option value="obsidian">${tp('Theme: {0}', 'obsidian')}</option>
+        <option value="blueprint">${tp('Theme: {0}', 'blueprint')}</option>
+        <option value="pastel">${tp('Theme: {0}', 'pastel')}</option>
+        <option value="high-contrast">${tp('Theme: {0}', 'high-contrast')}</option>
       </select>
-      <button id="clusters" title="Colapsa pastas com muitos arquivos num único nó">Clusters</button>
+      <button id="clusters" title="${t('Collapse folders into cluster nodes')}">Clusters</button>
       <span class="spacer"></span>
-      <button id="minimap-toggle" class="active" title="Mostrar/ocultar o minimapa">Mapa</button>
-      <button id="reset-layout" title="Limpar posições e cores manuais salvas">Reset</button>
-      <button id="export-png" title="Exportar o grafo como PNG">PNG</button>
-      <button id="export-svg" title="Exportar o grafo como SVG">SVG</button>
+      <button id="minimap-toggle" class="active" title="${t('Show/hide minimap')}">${t('Map')}</button>
+      <button id="reset-layout" title="${t('Clear saved positions and colors')}">Reset</button>
+      <button id="export-png" title="${t('Export graph as PNG')}">PNG</button>
+      <button id="export-svg" title="${t('Export graph as SVG')}">SVG</button>
     </div>
   </div>
   <div id="graph-wrap">
-    <div id="cy" role="application" aria-label="Project dependency graph"></div>
+    <div id="cy" role="application" aria-label="${t('Project dependency graph')}"></div>
     <div id="lanes" aria-hidden="true"></div>
-    <div id="detail" class="detail hidden" aria-label="Detalhe da dependência"></div>
-    <canvas id="minimap" class="minimap" width="200" height="140" aria-label="Minimapa do grafo"></canvas>
+    <div id="detail" class="detail hidden" aria-label="${t('Dependency detail')}"></div>
+    <canvas id="minimap" class="minimap" width="200" height="140" aria-label="${t('Graph minimap')}"></canvas>
   </div>
-  <div id="overlay" class="overlay"><div class="spinner"></div><span id="overlay-text">Building project graph…</span></div>
+  <div id="overlay" class="overlay"><div class="spinner"></div><span id="overlay-text">${t('Building project graph…')}</span></div>
+  <script>window.L = ${this.buildWindowL()};</script>
   <script src="https://cdn.jsdelivr.net/npm/cytoscape@${CYTOSCAPE_VERSION}/dist/cytoscape.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/layout-base@${LAYOUT_BASE_VERSION}/layout-base.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cose-base@${COSE_BASE_VERSION}/cose-base.js"></script>

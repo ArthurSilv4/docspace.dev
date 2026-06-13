@@ -98,10 +98,11 @@ export class NotionManager implements vscode.Disposable {
 	private client(): NotionClient | undefined {
 		const token = getToken();
 		if (!token) {
+			const connectLabel = vscode.l10n.t('Connect');
 			vscode.window.showWarningMessage(
-				'Docspace: conecte o Notion primeiro.',
-				'Conectar'
-			).then((choice) => { if (choice === 'Conectar') { void this.connect(); } });
+				vscode.l10n.t('Docspace: connect Notion first.'),
+				connectLabel
+			).then((choice) => { if (choice === connectLabel) { void this.connect(); } });
 			return undefined;
 		}
 		return new NotionClient(token);
@@ -110,8 +111,8 @@ export class NotionManager implements vscode.Disposable {
 	// ── Connect / disconnect ─────────────────────────────────────────────────────
 	private async connect(): Promise<void> {
 		const token = await vscode.window.showInputBox({
-			title: 'Docspace — token da integração Notion',
-			prompt: 'Cole o Internal Integration Token (começa com "ntn_" ou "secret_")',
+			title: vscode.l10n.t('Docspace — Notion integration token'),
+			prompt: vscode.l10n.t('Paste the Internal Integration Token (starts with "ntn_" or "secret_")'),
 			password: true,
 			ignoreFocusOut: true,
 			value: getToken(),
@@ -123,24 +124,25 @@ export class NotionManager implements vscode.Disposable {
 				TOKEN_KEY, token.trim(), vscode.ConfigurationTarget.Global
 			);
 			this.syncConnectedContext();
-			vscode.window.showInformationMessage(`Docspace: conectado ao Notion como "${name}".`);
+			vscode.window.showInformationMessage(vscode.l10n.t('Docspace: connected to Notion as "{0}".', name));
 			this.restartPolling();
 		} catch (err) {
-			vscode.window.showErrorMessage(`Docspace: token inválido — ${errText(err)}`);
+			vscode.window.showErrorMessage(vscode.l10n.t('Docspace: invalid token — {0}', errText(err)));
 		}
 	}
 
 	private async disconnect(): Promise<void> {
+		const disconnectLabel = vscode.l10n.t('Disconnect');
 		const ok = await vscode.window.showWarningMessage(
-			'Desconectar o Notion? O token e todos os vínculos de arquivos serão removidos.',
-			{ modal: true }, 'Desconectar'
+			vscode.l10n.t('Disconnect Notion? The token and all file links will be removed.'),
+			{ modal: true }, disconnectLabel
 		);
-		if (ok !== 'Desconectar') { return; }
+		if (ok !== disconnectLabel) { return; }
 		await vscode.workspace.getConfiguration('docspace').update(TOKEN_KEY, undefined, vscode.ConfigurationTarget.Global);
 		this.syncConnectedContext();
 		await this.setLinks([]);
 		if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = undefined; }
-		vscode.window.showInformationMessage('Docspace: Notion desconectado.');
+		vscode.window.showInformationMessage(vscode.l10n.t('Docspace: Notion disconnected.'));
 	}
 
 	// ── Import ───────────────────────────────────────────────────────────────────
@@ -148,17 +150,18 @@ export class NotionManager implements vscode.Disposable {
 		const client = this.client();
 		if (!client) { return; }
 		const query = await vscode.window.showInputBox({
-			title: 'Docspace — importar do Notion',
-			prompt: 'Busque por título da página (vazio lista as mais recentes)',
+			title: vscode.l10n.t('Docspace — import from Notion'),
+			prompt: vscode.l10n.t('Search by page title (leave empty to list most recent)'),
 			ignoreFocusOut: true,
 		});
 		if (query === undefined) { return; }
 
-		const pages = await withProgress('Buscando páginas…', () => client.searchPages(query));
+		const pages = await withProgress(vscode.l10n.t('Searching pages…'), () => client.searchPages(query));
 		if (!pages.length) {
+			const howToLabel = vscode.l10n.t('How to connect pages');
 			const action = await vscode.window.showWarningMessage(
-				'Nenhuma página encontrada. No Notion, abra cada página que quer importar, clique em "…" → "Conexões" e adicione sua integração.',
-				'Como conectar páginas'
+				vscode.l10n.t('No pages found. In Notion, open each page you want to import, click "…" → "Connections" and add your integration.'),
+				howToLabel
 			);
 			if (action) {
 				await vscode.env.openExternal(vscode.Uri.parse('https://www.notion.so/help/add-and-manage-connections-with-the-api#add-connections-to-pages'));
@@ -168,17 +171,17 @@ export class NotionManager implements vscode.Disposable {
 
 		const picks = await vscode.window.showQuickPick(
 			pages.map((p) => ({ label: pageTitle(p), description: p.id, page: p })),
-			{ title: 'Selecione as páginas para importar', canPickMany: true }
+			{ title: vscode.l10n.t('Select pages to import'), canPickMany: true }
 		);
 		if (!picks?.length) { return; }
 
 		const folder = await pickFolder();
 		if (!folder) { return; }
 
-		await withProgress('Importando…', async () => {
+		await withProgress(vscode.l10n.t('Importing…'), async () => {
 			for (const pick of picks) { await this.importOne(client, pick.page, folder); }
 		});
-		vscode.window.showInformationMessage(`Docspace: ${picks.length} página(s) importada(s).`);
+		vscode.window.showInformationMessage(vscode.l10n.t('Docspace: {0} page(s) imported.', picks.length));
 	}
 
 	private async importOne(client: NotionClient, page: NotionPage, folder: vscode.Uri): Promise<void> {
@@ -196,7 +199,10 @@ export class NotionManager implements vscode.Disposable {
 	// ── Pull / push ──────────────────────────────────────────────────────────────
 	private async pickLink(placeHolder: string): Promise<NotionLink | undefined> {
 		const links = this.links();
-		if (!links.length) { vscode.window.showInformationMessage('Nenhum arquivo vinculado ao Notion.'); return undefined; }
+		if (!links.length) {
+			vscode.window.showInformationMessage(vscode.l10n.t('No files linked to Notion.'));
+			return undefined;
+		}
 		const pick = await vscode.window.showQuickPick(
 			links.map((l) => ({ label: l.title, description: vscode.workspace.asRelativePath(l.fsPath), link: l })),
 			{ title: placeHolder }
@@ -207,8 +213,8 @@ export class NotionManager implements vscode.Disposable {
 	private async pullCommand(): Promise<void> {
 		const client = this.client();
 		if (!client) { return; }
-		const link = await this.pickLink('Puxar do Notion');
-		if (link) { await withProgress('Puxando…', () => this.pull(client, link, true)); }
+		const link = await this.pickLink(vscode.l10n.t('Pull from Notion'));
+		if (link) { await withProgress(vscode.l10n.t('Pulling…'), () => this.pull(client, link, true)); }
 	}
 
 	/** Overwrite the local file with the page's current content. Honours conflicts. */
@@ -223,16 +229,18 @@ export class NotionManager implements vscode.Disposable {
 
 		await vscode.workspace.fs.writeFile(uri, Buffer.from(md, 'utf8'));
 		await this.upsertLink({ ...link, title: pageTitle(page), lastEditedTime: page.last_edited_time, hash: sha1(md) });
-		if (manual) { vscode.window.showInformationMessage(`Docspace: "${link.title}" atualizado do Notion.`); }
+		if (manual) {
+			vscode.window.showInformationMessage(vscode.l10n.t('Docspace: "{0}" updated from Notion.', link.title));
+		}
 	}
 
 	private async pushCommand(): Promise<void> {
 		const client = this.client();
 		if (!client) { return; }
-		const link = await this.pickLink('Enviar para o Notion');
+		const link = await this.pickLink(vscode.l10n.t('Push to Notion'));
 		if (!link) { return; }
 		try {
-			await withProgress('Enviando…', async () => {
+			await withProgress(vscode.l10n.t('Pushing…'), async () => {
 				const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(link.fsPath));
 				const text = Buffer.from(bytes).toString('utf8');
 				// drop the leading "# Title" line — it lives in the page's own title
@@ -241,9 +249,9 @@ export class NotionManager implements vscode.Disposable {
 				const page = await client.retrievePage(link.notionId);
 				await this.upsertLink({ ...link, lastEditedTime: page.last_edited_time, hash: sha1(text) });
 			});
-			vscode.window.showInformationMessage(`Docspace: "${link.title}" enviado para o Notion.`);
+			vscode.window.showInformationMessage(vscode.l10n.t('Docspace: "{0}" pushed to Notion.', link.title));
 		} catch (err) {
-			vscode.window.showErrorMessage(`Docspace: falha ao enviar — ${errText(err)}`);
+			vscode.window.showErrorMessage(vscode.l10n.t('Docspace: failed to push — {0}', errText(err)));
 		}
 	}
 
@@ -255,16 +263,18 @@ export class NotionManager implements vscode.Disposable {
 	}
 
 	private async confirmOverwrite(uri: vscode.Uri, incoming: string): Promise<boolean> {
+		const viewDiff = vscode.l10n.t('View diff');
+		const overwrite = vscode.l10n.t('Overwrite local');
 		const choice = await vscode.window.showWarningMessage(
-			`Conflito em "${path.basename(uri.fsPath)}": há edições locais e a página mudou no Notion.`,
-			{ modal: true }, 'Ver diff', 'Sobrescrever local'
+			vscode.l10n.t('Conflict in "{0}": there are local edits and the Notion page has changed.', path.basename(uri.fsPath)),
+			{ modal: true }, viewDiff, overwrite
 		);
-		if (choice === 'Sobrescrever local') { return true; }
-		if (choice === 'Ver diff') {
+		if (choice === overwrite) { return true; }
+		if (choice === viewDiff) {
 			const tmp = vscode.Uri.joinPath(this.context.globalStorageUri, 'notion-incoming.md');
 			await vscode.workspace.fs.createDirectory(this.context.globalStorageUri);
 			await vscode.workspace.fs.writeFile(tmp, Buffer.from(incoming, 'utf8'));
-			await vscode.commands.executeCommand('vscode.diff', uri, tmp, 'Local ↔ Notion (entrada)');
+			await vscode.commands.executeCommand('vscode.diff', uri, tmp, vscode.l10n.t('Local ↔ Notion (incoming)'));
 		}
 		return false;
 	}
@@ -304,7 +314,7 @@ class NotionDecorationProvider implements vscode.FileDecorationProvider {
 
 	provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
 		return this.linked.has(uri.fsPath)
-			? { badge: 'N', tooltip: 'Vinculado ao Notion', color: new vscode.ThemeColor('charts.purple') }
+			? { badge: 'N', tooltip: vscode.l10n.t('Linked to Notion'), color: new vscode.ThemeColor('charts.purple') }
 			: undefined;
 	}
 }
@@ -320,7 +330,8 @@ function withProgress<T>(title: string, task: () => Thenable<T>): Thenable<T> {
 async function pickFolder(): Promise<vscode.Uri | undefined> {
 	const picked = await vscode.window.showOpenDialog({
 		canSelectFiles: false, canSelectFolders: true, canSelectMany: false,
-		openLabel: 'Importar aqui', title: 'Onde salvar as páginas importadas?',
+		openLabel: vscode.l10n.t('Import here'),
+		title: vscode.l10n.t('Where to save the imported pages?'),
 		defaultUri: workspaceRoot(),
 	});
 	return picked?.[0];

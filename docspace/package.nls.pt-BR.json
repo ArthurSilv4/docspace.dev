@@ -1,0 +1,44 @@
+{
+  "displayName": "Docspace Workspace",
+  "description": "Visualize e gerencie Markdown, diagramas Mermaid e canvas Excalidraw dentro do VS Code.",
+
+  "command.openPreview.title": "Abrir Preview",
+  "command.selectDiagramTheme.title": "Alterar tema dos diagramas",
+  "command.configureCategory.title": "Configurar categoria…",
+  "command.regenerateDoc.title": "Regenerar documentação",
+  "command.selectSort.title": "Ordenar arquivos",
+  "command.notionConnect.title": "Notion: Conectar",
+  "command.notionImport.title": "Notion: Importar páginas",
+  "command.notionPull.title": "Notion: Puxar (pull)",
+  "command.notionPush.title": "Notion: Enviar (push)",
+  "command.notionDisconnect.title": "Notion: Desconectar",
+  "command.openProjectGraph.title": "Abrir grafo do projeto",
+  "command.newMarkdown.title": "Novo arquivo Markdown",
+  "command.newMermaid.title": "Novo diagrama Mermaid",
+  "command.newExcalidraw.title": "Novo canvas",
+  "command.deleteFile.title": "Excluir",
+  "command.renameFile.title": "Renomear",
+  "command.showWelcome.title": "Docspace: Guia de início",
+  "command.openSettings.title": "Docspace: Configurações",
+
+  "viewsWelcome.contents": "Nenhum documento encontrado no workspace.\n\nCrie um arquivo para começar:\n[$(new-file) Novo Markdown](command:docspace.newMarkdown)\n[$(new-file) Novo Diagrama](command:docspace.newMermaid)\n[$(new-file) Novo Canvas](command:docspace.newExcalidraw)\n\n[$(question) Ver guia de início](command:docspace.showWelcome)",
+
+  "walkthrough.title": "Começar com o Docspace",
+  "walkthrough.description": "Organize docs, diagramas e canvas do seu projeto em minutos.",
+
+  "walkthrough.step.sidebar.title": "Suas docs em um lugar só",
+  "walkthrough.step.sidebar.description": "O Docspace organiza seus arquivos em três categorias: **Docs** (`.md`), **Diagrams** (`.mmd`) e **Canvas** (`.excalidraw`).\n\nCrie seu primeiro arquivo — ele aparece na sidebar imediatamente:\n\n[$(new-file) Novo Markdown](command:docspace.newMarkdown)\n[$(new-file) Novo Diagrama](command:docspace.newMermaid)\n[$(new-file) Novo Canvas](command:docspace.newExcalidraw)",
+  "walkthrough.step.sidebar.altText": "Sidebar do Docspace mostrando categorias Docs, Diagrams e Canvas com arquivos",
+
+  "walkthrough.step.preview.title": "Preview de Markdown e Mermaid",
+  "walkthrough.step.preview.description": "Clique num arquivo `.md` ou `.mmd` na sidebar para abrir o preview ao lado.\n\nEmbeds funcionam diretamente no Markdown:\n- `![[diagrama.mmd]]` renderiza o diagrama inline\n- `![[canvas.excalidraw]]` renderiza o canvas como SVG\n\n[$(open-preview) Abrir Preview](command:docspace.openPreview)",
+  "walkthrough.step.preview.altText": "Preview split-view mostrando Markdown à esquerda e conteúdo renderizado à direita",
+
+  "walkthrough.step.graph.title": "Mapa visual do projeto",
+  "walkthrough.step.graph.description": "O **Project Graph** varre seu código e exibe as dependências entre arquivos de forma interativa.\n\nTrês modos de visualização:\n- **Dependências** — rede de imports (force-layout)\n- **Fluxo** — swimlanes por papel arquitetural\n- **Impacto** — clique num arquivo e veja quem seria afetado\n\n[$(type-hierarchy) Abrir Project Graph](command:docspace.openProjectGraph)",
+  "walkthrough.step.graph.altText": "Grafo de dependências com nós coloridos por pasta e arestas de import",
+
+  "walkthrough.step.generate.title": "Documentação automática",
+  "walkthrough.step.generate.description": "Clique no ícone **📖** na barra do Docspace para gerar automaticamente uma pasta `docGerada/` com:\n\n- `index.md` — visão geral + diff vs. geração anterior\n- `estrutura.md` — arquivos agrupados por papel\n- `dependencias.md` — imports por arquivo\n- `acoplamento.md` — ranking de acoplamento\n- `fluxos.md` — caminhos a partir dos entry points\n\n[$(book) Gerar documentação agora](command:docspace.regenerateDoc)",
+  "walkthrough.step.generate.altText": "Pasta docGerada com arquivos de documentação gerada e preview do index.md"
+}

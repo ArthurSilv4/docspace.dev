@@ -321,9 +321,15 @@
 	// ── Layout ──────────────────────────────────────────────────────────────────
 	const LANES = ['entry', 'controller', 'service', 'repository', 'model', 'util', 'other', 'external'];
 	const LANE_LABELS = {
-		entry: 'Entry points', controller: 'Controllers', service: 'Services',
-		repository: 'Repositories', model: 'Models', util: 'Utils', other: 'Outros', external: 'Externos',
+		entry: window.L.laneEntry, controller: window.L.laneController, service: window.L.laneService,
+		repository: window.L.laneRepository, model: window.L.laneModel, util: window.L.laneUtil,
+		other: window.L.laneOther, external: window.L.laneExternal,
 	};
+
+	function fmt(str) {
+		const args = Array.prototype.slice.call(arguments, 1);
+		return str.replace(/\{(\d+)\}/g, function (_, i) { return args[i] != null ? String(args[i]) : ''; });
+	}
 	const ROW_H = 58;        // vertical distance between sub-rows inside a lane
 	const LANE_PAD = 34;     // band padding above/below the rows
 	const LANE_GAP = 26;     // gap between consecutive bands
@@ -505,7 +511,7 @@
 			cy.elements().not(trail).addClass('dim');
 			trail.addClass('trail');
 		});
-		statsEl.textContent = `Trilha de ${node.data('label')}: ${trail.nodes().length} arquivos`;
+		statsEl.textContent = fmt(window.L.trailStat, node.data('label'), trail.nodes().length);
 	}
 
 	function affectedBy(node) {
@@ -522,7 +528,7 @@
 			affected.addClass('impact-hit');
 		});
 		const count = affected.nodes().length;
-		statsEl.textContent = `${count} arquivo${count === 1 ? '' : 's'} afetado${count === 1 ? '' : 's'} por mudança em ${node.data('label')}`;
+		statsEl.textContent = fmt(window.L.impactStat, count, node.data('label'));
 	}
 
 	function clearInteraction() {
@@ -610,7 +616,7 @@
 
 		const files = graph.nodes.filter((n) => n.data.type === 'file').length;
 		const modules = graph.nodes.filter((n) => n.data.type === 'module').length;
-		baseStats = `${files} arquivos · ${modules} módulos · ${graph.edges.length} conexões`;
+		baseStats = fmt(window.L.statsFormat, files, modules, graph.edges.length);
 		statsEl.textContent = baseStats;
 	}
 
@@ -739,10 +745,10 @@
 		const specs = edge.data('specs') || [];
 		const rows = specs.length
 			? specs.map((s) => `<li><code>${escapeHtml(s)}</code></li>`).join('')
-			: '<li><em>sem detalhe de import</em></li>';
+			: `<li><em>${escapeHtml(window.L.noImportDetail)}</em></li>`;
 		detailEl.innerHTML =
 			`<div class="detail-head"><strong>${escapeHtml(src)}</strong> → <strong>${escapeHtml(tgt)}</strong>` +
-			`<button id="detail-close" title="Fechar">✕</button></div>` +
+			`<button id="detail-close" title="${escapeHtml(window.L.detailClose)}">✕</button></div>` +
 			`<div class="detail-sub">${specs.length} import${specs.length === 1 ? '' : 's'}:</div>` +
 			`<ul class="detail-list">${rows}</ul>`;
 		detailEl.classList.remove('hidden');
@@ -777,10 +783,6 @@
 	}
 
 	const PAINT_COLORS = ['#f7768e', '#e0af68', '#9ece6a', '#7aa2f7', '#bb9af7', '#6b7089'];
-	const PAINT_LABELS = {
-		'#f7768e': 'não mexer', '#e0af68': 'dívida técnica', '#9ece6a': 'ok',
-		'#7aa2f7': 'revisar', '#bb9af7': 'refatorar', '#6b7089': 'neutro',
-	};
 	let colorMenuEl = null;
 
 	function closeColorMenu() {
@@ -809,13 +811,13 @@
 			const sw = document.createElement('button');
 			sw.className = 'swatch';
 			sw.style.background = c;
-			sw.title = PAINT_LABELS[c] || c;
+			sw.title = (window.L.paintLabels && window.L.paintLabels[c]) || c;
 			sw.addEventListener('click', () => paintNode(node, c));
 			menu.appendChild(sw);
 		}
 		const clear = document.createElement('button');
 		clear.className = 'swatch-clear';
-		clear.textContent = 'remover';
+		clear.textContent = window.L.colorRemove;
 		clear.addEventListener('click', () => paintNode(node, null));
 		menu.appendChild(clear);
 		document.getElementById('graph-wrap').appendChild(menu);
@@ -839,7 +841,7 @@
 		const turningOn = collapsedFolders.size === 0;
 		collapsedFolders = new Set(turningOn ? collapsibleFolders(currentGraph) : []);
 		if (turningOn && collapsedFolders.size === 0) {
-			statsEl.textContent = `Nenhuma pasta com ${CLUSTER_MIN}+ arquivos para agrupar`;
+			statsEl.textContent = fmt(window.L.noClusters, CLUSTER_MIN);
 			return;
 		}
 		syncClusterButton();
@@ -981,7 +983,7 @@
 	});
 
 	document.getElementById('refresh').addEventListener('click', () => {
-		overlayText.textContent = 'Rebuilding project graph…';
+		overlayText.textContent = window.L.rebuilding;
 		overlayEl.classList.remove('hidden');
 		vscode.postMessage({ type: 'refresh' });
 	});
@@ -999,7 +1001,7 @@
 				populateFolderFilter(msg.graph);
 				overlayEl.classList.add('hidden');
 			} catch (err) {
-				overlayText.textContent = `Erro ao renderizar o grafo: ${err instanceof Error ? err.message : String(err)}`;
+				overlayText.textContent = fmt(window.L.renderError, err instanceof Error ? err.message : String(err));
 				overlayEl.querySelector('.spinner').style.display = 'none';
 			}
 		} else if (msg.type === 'theme') {

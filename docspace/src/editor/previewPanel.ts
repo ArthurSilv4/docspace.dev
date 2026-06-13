@@ -125,6 +125,19 @@ export class PreviewPanel {
 		this.panel.webview.html = this.buildHtml(source, isMmd, embeds);
 	}
 
+	private buildWindowL(): string {
+		return JSON.stringify({
+			embedNotFound:   vscode.l10n.t('![[{0}]] — file not found'),
+			embedNoRenderer: vscode.l10n.t('![[{0}]] — could not load renderer'),
+			embedRenderError: vscode.l10n.t('![[{0}]] — render error: {1}'),
+			toc:             vscode.l10n.t('Table of Contents'),
+			copy:            vscode.l10n.t('Copy'),
+			copyTitle:       vscode.l10n.t('Copy code'),
+			copied:          vscode.l10n.t('Copied!'),
+			copyFailed:      vscode.l10n.t('Failed'),
+		});
+	}
+
 	private buildHtml(source: string, isMmd: boolean, embeds: Record<string, string>): string {
 		const webview  = this.panel.webview;
 		const cssUri   = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'preview.css'));
@@ -148,6 +161,7 @@ export class PreviewPanel {
     window.__DOCSPACE_IS_MMD__   = ${JSON.stringify(isMmd)};
     window.__DOCSPACE_FILENAME__ = ${JSON.stringify(filename)};
     window.__DOCSPACE_EMBEDS__   = ${JSON.stringify(embeds)};
+    window.L = ${this.buildWindowL()};
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@panzoom/panzoom@4/dist/panzoom.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
