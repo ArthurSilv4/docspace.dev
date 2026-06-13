@@ -60,6 +60,8 @@ npm run test       # Compile + lint + run tests via vscode-test
 npm run l10n:extract  # Extract l10n strings from src/ into l10n/
 ```
 
+**Releasing** (`scripts/release.mjs`): `npm run release:patch` (or `:minor`/`:major`) bumps the version (`npm version --no-git-tag-version`) and prepends a dated template section to `CHANGELOG.md` — requires a clean working tree. Fill in the changelog notes, then `npm run release:finish` compiles + lints + `vsce package`s the `.vsix`, then `git commit`s (`release: vX.Y.Z`) and tags `vX.Y.Z`. Add `--dry-run` to `prepare` to preview without writing. Nothing is published — push the tag manually when ready.
+
 **Debug/run in VS Code:** Press `F5` from the `docspace/` folder — launches an Extension Development Host window with the extension loaded.
 
 **Run tests in VS Code:** Open the Testing view (Ctrl+; A) — requires the watch task to be running so test files are compiled.

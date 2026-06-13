@@ -1,5 +1,5 @@
 {
-  "name": "docspace-workspace",
+  "name": "ArthurSilv4",
   "displayName": "%displayName%",
   "description": "%description%",
   "publisher": "ArthurSilv4",
@@ -442,7 +442,12 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test",
-    "l10n:extract": "npx @vscode/l10n-dev export --outDir ./l10n ./src"
+    "l10n:extract": "npx @vscode/l10n-dev export --outDir ./l10n ./src",
+    "package": "vsce package --allow-missing-repository",
+    "release:patch": "node scripts/release.mjs prepare patch",
+    "release:minor": "node scripts/release.mjs prepare minor",
+    "release:major": "node scripts/release.mjs prepare major",
+    "release:finish": "node scripts/release.mjs finish"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -451,6 +456,7 @@
     "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.2.1",
     "eslint": "^9.39.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
